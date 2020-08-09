@@ -20,7 +20,10 @@ inThisBuild(
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 
-val zioVersion = "1.0.0"
+val zioVersion        = "1.0.0"
+val zioNioVersion     = "1.0.0-RC9"
+val zioLoggingVersion = "0.4.0"
+val zioConfigVersion  = "1.0.0-RC26"
 
 lazy val root = project
   .in(file("."))
@@ -34,9 +37,17 @@ lazy val memberlist =
     .settings(buildInfoSettings("zio.memberlist"))
     .settings(
       libraryDependencies ++= Seq(
-        "dev.zio" %% "zio"          % zioVersion,
-        "dev.zio" %% "zio-test"     % zioVersion % Test,
-        "dev.zio" %% "zio-test-sbt" % zioVersion % Test
+        "dev.zio"                %% "zio"                     % zioVersion,
+        "dev.zio"                %% "zio-streams"             % zioVersion,
+        "dev.zio"                %% "zio-nio"                 % zioNioVersion,
+        "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
+        "dev.zio"                %% "zio-config"              % zioConfigVersion,
+        "com.lihaoyi"            %% "upickle"                 % "1.2.0",
+        "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
+        "dev.zio"                %% "zio-test"                % zioVersion % Test,
+        "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test,
+        ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
+        compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.6.0").cross(CrossVersion.full))
       )
     )
     .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))

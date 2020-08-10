@@ -53,7 +53,7 @@ lazy val memberlist =
     .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
 
 lazy val docs = project
-  .in(file("zio-docs"))
+  .in(file("zio-memberlist-docs"))
   .settings(
     skip.in(publish) := true,
     moduleName := "zio-memberlist-docs",
@@ -61,6 +61,9 @@ lazy val docs = project
     scalacOptions -= "-Xfatal-warnings",
     libraryDependencies ++= Seq(
       "dev.zio" %% "zio" % zioVersion
+    ),
+    mdocVariables := Map(
+      "VERSION" -> version.value
     ),
     unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(root),
     target in (ScalaUnidoc, unidoc) := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",

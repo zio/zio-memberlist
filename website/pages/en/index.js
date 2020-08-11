@@ -91,35 +91,21 @@ class Index extends React.Component {
             </Container>
         );
 
-        const FeatureCallout = () => (
-            <div
-                className="productShowcaseSection paddingBottom"
-                style={{textAlign: 'center'}}>
-                <h2>Welcome to zio-memberlist</h2>
-                <MarkdownBlock>
-                    TODO: Tagline
-                </MarkdownBlock>
-
-                <MarkdownBlock>
-                    TODO: Long description (paragraph)
-                </MarkdownBlock>
-            </div>
-        );
-
+        
         const Features = () => (
             <Block layout="fourColumn">
                 {[
                     {
-                        content: 'TODO: Content 1',
+                        content: 'Build on top of ZIO',
                         image: `${baseUrl}img/undraw_tweetstorm.svg`,
                         imageAlign: 'top',
-                        title: 'TODO: Title 1',
+                        title: 'Type and resource safe',
                     },
                     {
-                        content: 'TODO: Content 2',
+                        content: 'Memberlist is based on Hashicorp research',
                         image: `${baseUrl}img/undraw_operating_system.svg`,
                         imageAlign: 'top',
-                        title: 'TODO: Title 2',
+                        title: 'Research based',
                     },
                 ]}
             </Block>
@@ -130,7 +116,6 @@ class Index extends React.Component {
                 <HomeSplash siteConfig={siteConfig} language={language}/>
                 <div className="mainContainer">
                     <Features/>
-                    <FeatureCallout/>
                 </div>
             </div>
         );

@@ -17,12 +17,14 @@ Name of the project come from name of Hashicorp project [memberlist](https://git
 libraryDependencies += "dev.zio" %% "zio-memberlist" % "@VERSION@"
 ```
 
-## Seeds nodes
+## First Cluster
+
+### Seeds nodes
 
 In most if not all of membership protocols we have a concept of seeds nodes. It is list of addresses to cluster nodes that new nodes will use to join a cluster. This list could be static list of IP addresses or it could be dns name that is dynamically updated when members join and leave. In `ZIO-memberslist` we represent this via [`zio.memberlist.discovery.Discovery.Service`](https://github.com/zio/zio-memberlist/blob/master/memberlist/src/main/scala/zio/memberlist/discovery/Discovery.scala).
 We provide two implementations that should allow you to start cluster.
 
-### Static list of nodes
+#### Static list of nodes
 ```scala
 import zio.nio.core.SocketAddress._
 
@@ -34,7 +36,7 @@ val seeds = Discovery.staticList(
             )
 ```
 
-### Kubernetes service DNS
+#### Kubernetes service DNS
 
 To make this work you need to create headless service in k8 to represent cluster. Below example of service configuration
 ```
@@ -71,7 +73,7 @@ val seeds = Discovery.k8Dns(
             )
 ```
 
-# Define messages
+## Define messages
 
 ZIO-memberlist allow you to send messages to other nodes in the cluster. However there is important limitation. Since ZIO-memberlist uses UDP for comunication your messages need to respect MTU. 
 
@@ -86,7 +88,7 @@ object ChaosMonkey {
   final case object SimulateCpuSpike extends ChaosMonkey
 
   implicit val cpuSpikeCodec: ByteCodec[SimulateCpuSpike.type] =
-    ByteCodec.fromReadWriter(macroRW[SimulateCpuSpike.type])
+    ByaateCodec.fromReadWriter(macroRW[SimulateCpuSpike.type])
 
   implicit val codec: ByteCodec[ChaosMonkey] =
     ByteCodec.tagged[ChaosMonkey][
@@ -96,7 +98,7 @@ object ChaosMonkey {
 ```
 As you see apart of messages we need to provide `ByteCodec` instances that will be used to decode and encode your messages.  
 
-# Start Cluster
+## Start Cluster
 
 We need to put this all together. Let start with dependencies.
 ```scala

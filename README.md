@@ -4,7 +4,7 @@
 | --- | --- | --- | --- |
 | [![Build Status][Badge-Circle]][Link-Circle] | [![Release Artifacts][Badge-SonatypeReleases]][Link-SonatypeReleases] | [![Snapshot Artifacts][Badge-SonatypeSnapshots]][Link-SonatypeSnapshots] | [![Badge-Discord]][Link-Discord] |
 
-ZIO-based liabrary for cluster membership and failure detection using gossip based protocol.
+ZIO-based library for cluster membership and failure detection using gossip based protocol.
 
 This library is inspired by Hashicorp research on improving [SWIM](https://ieeexplore.ieee.org/document/1028914) protocol published in [Lifeguard](https://ieeexplore.ieee.org/document/1028914) paper. 
 

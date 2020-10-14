@@ -117,34 +117,34 @@ object FailureDetection {
           nodeState(node)
             .orElseSucceed(NodeState.Dead)
             .flatMap {
+              case NodeState.Suspicion =>
+                SuspicionTimeout.incomingSuspect(node, from)
               case NodeState.Dead | NodeState.Suspicion =>
-                SuspicionTimeout.incomingSuspect(node, from) *>
-                  Message.noResponse
+                STM.unit
               case _ =>
-                changeNodeState(node, NodeState.Suspicion).ignore *>
-                  Message.noResponse
-            }
+                changeNodeState(node, NodeState.Suspicion).ignore
+            }.commit *> Message.noResponse
 
         case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
-          changeNodeState(nodeAddress, NodeState.Left).ignore
+          changeNodeState(nodeAddress, NodeState.Left).ignore.commit
             .as(Message.Broadcast(msg))
 
         case Message.Direct(_, _, msg @ Dead(nodeAddress)) =>
-          nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
+          nodeState(nodeAddress).orElseSucceed(NodeState.Dead).commit.flatMap {
             case NodeState.Dead => Message.noResponse
             case _ =>
-              changeNodeState(nodeAddress, NodeState.Dead).ignore
+              changeNodeState(nodeAddress, NodeState.Dead).ignore.commit
                 .as(Message.Broadcast(msg))
           }
 
         case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
-          SuspicionTimeout.cancelTimeout(nodeAddress) *>
+          (SuspicionTimeout.cancelTimeout(nodeAddress) *>
             changeNodeState(nodeAddress, NodeState.Healthy).ignore
-              .as(Message.Broadcast(msg))
+              .as(Message.Broadcast(msg))).commit
       },
       ZStream
         .repeatEffectWith(
-          nextNode().zip(ConversationId.next),
+          nextNode().commit.zip(ConversationId.next),
           Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod))
         )
         .collectM {
@@ -183,7 +183,7 @@ object FailureDetection {
         Message.noResponse,
         log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
           LocalHealthMultiplier.increase *>
-          nextNode(Some(probedNode)).flatMap {
+          nextNode(Some(probedNode)).commit.flatMap {
             case Some((next, _)) =>
               pendingNacks.put(conversationId).commit *>
                 Message.withScaledTimeout(
@@ -197,7 +197,7 @@ object FailureDetection {
 
             case None =>
               // we don't know any other node to ask
-              changeNodeState(probedNode, NodeState.Dead) *>
+              changeNodeState(probedNode, NodeState.Dead).commit *>
                 Message.noResponse
           }
       )
@@ -215,14 +215,14 @@ object FailureDetection {
             .delete(conversationId)
             .commit)
           .whenM(pendingNacks.contains(conversationId).commit) *>
-          changeNodeState(probedNode, NodeState.Suspicion) *>
+          changeNodeState(probedNode, NodeState.Suspicion).commit *>
           Message.withTimeout(
             Message.Broadcast(Suspect(localNode, probedNode)),
             SuspicionTimeout
               .registerTimeout(probedNode) {
-                ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
+                ZIO.ifM(nodeState(probedNode).commit.map(_ == NodeState.Suspicion).orElseSucceed(false))(
                   changeNodeState(probedNode, NodeState.Dead)
-                    .as(Message.Broadcast(Dead(probedNode))),
+                    .as(Message.Broadcast(Dead(probedNode))).commit,
                   Message.noResponse
                 )
               }

@@ -88,7 +88,7 @@ object Memberlist {
         override def localMember: NodeAddress = localNodeAddress
 
         override def nodes: UIO[Set[NodeAddress]] =
-          env.get[Nodes.Service].healthyNodes.map(_.map(_._1).toSet)
+          env.get[Nodes.Service].healthyNodes.map(_.map(_._1).toSet).commit
       }
 
     internalLayer >>> ZLayer.fromManaged(managed)

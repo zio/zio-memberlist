@@ -1,12 +1,12 @@
 package zio.memberlist
 
+import zio.ZLayer
 import zio.clock.Clock
 import zio.logging.Logging
 import zio.memberlist.ClusterError.UnknownNode
-import zio.memberlist.MembershipEvent.{ Join, Leave }
-import zio.stm.TMap
-import zio.stream.{ Stream, ZStream }
-import zio.{ IO, Queue, Ref, UIO, URIO, ZIO, ZLayer }
+import zio.memberlist.MembershipEvent.{Join, Leave}
+import zio.stm._
+import zio.stream.{Stream, ZStream}
 
 object Nodes {
 
@@ -14,20 +14,20 @@ object Nodes {
    * Nodes maintains state of the cluster.
    */
   trait Service {
-    def addNode(node: NodeAddress): UIO[Unit]
+    def addNode(node: NodeAddress): USTM[Unit]
 
     /**
      * Changes node state and issue membership event.
      * @param id - member id
      * @param newState - new state
      */
-    def changeNodeState(id: NodeAddress, newState: NodeState): IO[Error, Unit]
+    def changeNodeState(id: NodeAddress, newState: NodeState): STM[Error, Unit]
 
     /**
      * close connection and remove Node from cluster.
      * @param id node id
      */
-    def disconnect(id: NodeAddress): IO[Error, Unit]
+    def disconnect(id: NodeAddress): STM[Error, Unit]
 
     /**
      *  Stream of Membership Events
@@ -37,43 +37,43 @@ object Nodes {
     /**
      * Returns next node.
      */
-    def next(exclude: Option[NodeAddress]): UIO[Option[(NodeAddress, NodeState)]]
+    def next(exclude: Option[NodeAddress]): USTM[Option[(NodeAddress, NodeState)]]
 
     /**
      * Node state for given NodeId.
      */
-    def nodeState(id: NodeAddress): IO[Error, NodeState]
+    def nodeState(id: NodeAddress): STM[Error, NodeState]
 
-    val numberOfNodes: UIO[Int]
+    val numberOfNodes: USTM[Int]
 
     /**
      * Lists members that are in healthy state.
      */
-    def healthyNodes: UIO[List[(NodeAddress, NodeState)]]
+    def healthyNodes: USTM[List[(NodeAddress, NodeState)]]
 
     /**
      * Returns string with cluster state.
      */
-    val prettyPrint: UIO[String]
+    val prettyPrint: USTM[String]
   }
 
-  def addNode(node: NodeAddress): ZIO[Nodes, Nothing, Unit] =
-    ZIO.accessM[Nodes](_.get.addNode(node))
+  def addNode(node: NodeAddress): ZSTM[Nodes, Nothing, Unit] =
+    ZSTM.accessM[Nodes](_.get.addNode(node))
 
-  def nextNode(exclude: Option[NodeAddress] = None): URIO[Nodes, Option[(NodeAddress, NodeState)]] =
-    ZIO.accessM[Nodes](_.get.next(exclude))
+  def nextNode(exclude: Option[NodeAddress] = None): URSTM[Nodes, Option[(NodeAddress, NodeState)]] =
+    ZSTM.accessM[Nodes](_.get.next(exclude))
 
-  def nodeState(id: NodeAddress): ZIO[Nodes, Error, NodeState] =
-    ZIO.accessM[Nodes](_.get.nodeState(id))
+  def nodeState(id: NodeAddress): ZSTM[Nodes, Error, NodeState] =
+    ZSTM.accessM[Nodes](_.get.nodeState(id))
 
-  def changeNodeState(id: NodeAddress, newState: NodeState): ZIO[Nodes, Error, Unit] =
-    ZIO.accessM[Nodes](_.get.changeNodeState(id, newState))
+  def changeNodeState(id: NodeAddress, newState: NodeState): ZSTM[Nodes, Error, Unit] =
+    ZSTM.accessM[Nodes](_.get.changeNodeState(id, newState))
 
-  def disconnect(id: NodeAddress): ZIO[Nodes, Error, Unit] =
-    ZIO.accessM[Nodes](_.get.disconnect(id))
+  def disconnect(id: NodeAddress): ZSTM[Nodes, Error, Unit] =
+    ZSTM.accessM[Nodes](_.get.disconnect(id))
 
-  val prettyPrint: URIO[Nodes, String] =
-    ZIO.accessM[Nodes](_.get.prettyPrint)
+  val prettyPrint: URSTM[Nodes, String] =
+    ZSTM.accessM[Nodes](_.get.prettyPrint)
 
   def events: ZStream[Nodes, Nothing, MembershipEvent] =
     ZStream.accessStream[Nodes](_.get.events)
@@ -94,69 +94,64 @@ object Nodes {
     ZLayer.fromEffect(
       for {
         nodeStates          <- TMap.empty[NodeAddress, NodeState].commit
-        eventsQueue         <- Queue.sliding[MembershipEvent](100)
-        internalEventsQueue <- Queue.sliding[NodeStateChanged](100)
-        roundRobinOffset    <- Ref.make(0)
-        logger              <- ZIO.access[Logging](_.get)
+        eventsQueue         <- TQueue.bounded[MembershipEvent](100).commit
+        roundRobinOffset    <- TRef.make(0).commit
       } yield new Nodes.Service {
 
-        def addNode(node: NodeAddress): UIO[Unit] =
+        def addNode(node: NodeAddress): USTM[Unit] =
           nodeStates
             .put(node, NodeState.Init)
             .whenM(nodeStates.contains(node).map(!_))
-            .commit
             .unit
 
-        def changeNodeState(id: NodeAddress, newState: NodeState): IO[Error, Unit] =
+        def changeNodeState(id: NodeAddress, newState: NodeState): STM[Error, Unit] =
           nodeState(id).flatMap {
             prev =>
-              ZIO.when(prev != newState) {
-                logger.info(s"changing node[$id] status from: [$prev] to: [$newState]") *>
-                  nodeStates
-                    .put(id, newState)
-                    .commit
-                    .tap { _ =>
-                      ZIO.whenCase(newState) {
-                        case NodeState.Healthy if prev == NodeState.Init => eventsQueue.offer(Join(id))
-                        case NodeState.Dead | NodeState.Left             => eventsQueue.offer(Leave(id))
-                      } *> internalEventsQueue.offer(NodeStateChanged(id, prev, newState)).unit
-                    }
+              ZSTM.when(prev != newState) {
+                nodeStates
+                  .put(id, newState)
+                  .tap { _ =>
+                    ZSTM.whenCase(newState) {
+                      case NodeState.Healthy if prev == NodeState.Init => eventsQueue.offer(Join(id))
+                      case NodeState.Dead | NodeState.Left             => eventsQueue.offer(Leave(id))
+                    }.unit
+                  }
               }
           }
 
-        def disconnect(id: NodeAddress): IO[Error, Unit] =
-          nodeStates.delete(id).commit
+        def disconnect(id: NodeAddress): STM[Error, Unit] =
+          nodeStates.delete(id)
 
         def events: Stream[Nothing, MembershipEvent] =
-          ZStream.fromQueue(eventsQueue)
+          ZStream.fromTQueue(eventsQueue)
 
         def next(
-          exclude: Option[NodeAddress]
-        ): UIO[Option[(NodeAddress, NodeState)]] /*(exclude: List[NodeId] = Nil)*/ =
+                  exclude: Option[NodeAddress]
+                ): USTM[Option[(NodeAddress, NodeState)]] /*(exclude: List[NodeId] = Nil)*/ =
           for {
             list <- nodeStates.toList
-                     .map(
-                       _.filter(entry =>
-                         (entry._2 == NodeState.Healthy || entry._2 == NodeState.Suspicion) && !exclude
-                           .contains(entry._1)
-                       )
-                     )
-                     .commit
+              .map(
+                _.filter(entry =>
+                  (entry._2 == NodeState.Healthy || entry._2 == NodeState.Suspicion) && !exclude
+                    .contains(entry._1)
+                )
+              )
+
             nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
-            _         <- nodeStates.removeIf((_, v) => v == NodeState.Dead).when(nextIndex == 0).commit
+            _         <- nodeStates.removeIf((_, v) => v == NodeState.Dead).when(nextIndex == 0)
           } yield list.drop(nextIndex).headOption
 
-        def nodeState(id: NodeAddress): IO[Error, NodeState] =
-          nodeStates.get(id).commit.get.orElseFail(UnknownNode(id))
+        def nodeState(id: NodeAddress): STM[Error, NodeState] =
+          nodeStates.get(id).get.orElseFail(UnknownNode(id))
 
-        val numberOfNodes: UIO[Int] =
-          nodeStates.keys.map(_.size).commit
+        val numberOfNodes: USTM[Int] =
+          nodeStates.keys.map(_.size)
 
-        def healthyNodes: UIO[List[(NodeAddress, NodeState)]] =
-          nodeStates.toList.map(_.filter(_._2 == NodeState.Healthy)).commit
+        def healthyNodes: USTM[List[(NodeAddress, NodeState)]] =
+          nodeStates.toList.map(_.filter(_._2 == NodeState.Healthy))
 
-        val prettyPrint: UIO[String] =
-          nodeStates.toList.commit.map(nodes =>
+        val prettyPrint: USTM[String] =
+          nodeStates.toList.map(nodes =>
             "[ size: " + nodes.size +
               " nodes: [" +
               nodes.map {

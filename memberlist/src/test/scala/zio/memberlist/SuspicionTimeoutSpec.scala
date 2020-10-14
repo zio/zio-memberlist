@@ -33,7 +33,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("schedule timeout with 100 nodes cluster") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
         node    = NodeAddress(Array(1, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
         _ <- SuspicionTimeout
@@ -48,7 +48,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("timeout should be decreased when another confirmation arrives") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
         node    = NodeAddress(Array(1, 1, 1, 1), 1111)
         other   = NodeAddress(Array(2, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
@@ -58,7 +58,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
               )
               .fork
         _           <- TestClock.adjust(150.milliseconds)
-        _           <- SuspicionTimeout.incomingSuspect(node, other)
+        _           <- SuspicionTimeout.incomingSuspect(node, other).commit
         _           <- TestClock.adjust(50000.milliseconds)
         elapsedTime <- promise.await
       } yield assert(elapsedTime)(equalTo(3000L))
@@ -66,7 +66,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     testM("should be able to cancel") {
       for {
         promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)))
+        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
         node    = NodeAddress(Array(1, 1, 1, 1), 1111)
         start   <- currentTime(TimeUnit.MILLISECONDS)
         timeoutFiber <- SuspicionTimeout
@@ -76,7 +76,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
                          .either
                          .fork
         _   <- TestClock.adjust(150.milliseconds)
-        _   <- SuspicionTimeout.cancelTimeout(node)
+        _   <- SuspicionTimeout.cancelTimeout(node).commit
         _   <- TestClock.adjust(50000.milliseconds)
         res <- timeoutFiber.join
       } yield assert(res)(isLeft(equalTo(SuspicionTimeoutCancelled(node))))

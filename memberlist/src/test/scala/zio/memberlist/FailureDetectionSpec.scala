@@ -51,10 +51,10 @@ object FailureDetectionSpec extends KeeperSpec {
                      case Message.Direct(nodeAddr, ackId, Ping) =>
                        Message.Direct(nodeAddr, ackId, Ack)
                    }
-        _        <- Nodes.addNode(nodeAddress1)
-        _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
-        _        <- Nodes.addNode(nodeAddress2)
-        _        <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy)
+        _        <- Nodes.addNode(nodeAddress1).commit
+        _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
+        _        <- Nodes.addNode(nodeAddress2).commit
+        _        <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy).commit
         _        <- TestClock.adjust(100.seconds)
         messages <- recorder.collectN(3) { case Message.Direct(addr, _, Ping) => addr }
       } yield assert(messages.toSet)(equalTo(Set(nodeAddress2, nodeAddress1)))
@@ -65,11 +65,11 @@ object FailureDetectionSpec extends KeeperSpec {
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
         recorder  <- ProtocolRecorder[FailureDetection]()
-        _         <- Nodes.addNode(nodeAddress1)
-        _         <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
+        _         <- Nodes.addNode(nodeAddress1).commit
+        _         <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
         _         <- TestClock.adjust(1500.milliseconds)
         messages  <- recorder.collectN(2) { case msg => msg }
-        nodeState <- Nodes.nodeState(nodeAddress1).orElseSucceed(NodeState.Dead) // in case it was cleaned up already
+        nodeState <- Nodes.nodeState(nodeAddress1).orElseSucceed(NodeState.Dead).commit // in case it was cleaned up already
       } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping), Message.NoResponse))) &&
         assert(nodeState)(equalTo(NodeState.Dead))
     }.provideCustomLayer(testLayer) @@ ignore,
@@ -81,10 +81,10 @@ object FailureDetectionSpec extends KeeperSpec {
                      case Message.Direct(`nodeAddress1`, _, Ping) =>
                        Message.NoResponse //simulate failing node
                    }
-        _   <- Nodes.addNode(nodeAddress1)
-        _   <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
-        _   <- Nodes.addNode(nodeAddress2)
-        _   <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy)
+        _   <- Nodes.addNode(nodeAddress1).commit
+        _   <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
+        _   <- Nodes.addNode(nodeAddress2).commit
+        _   <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy).commit
         _   <- TestClock.adjust(10.seconds)
         msg <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
       } yield assert(msg)(equalTo(List(PingReq(nodeAddress1))))
@@ -99,10 +99,10 @@ object FailureDetectionSpec extends KeeperSpec {
                      case Message.Direct(`nodeAddress2`, ackId, _: PingReq) =>
                        Message.Direct(nodeAddress2, ackId, Ack)
                    }
-        _ <- Nodes.addNode(nodeAddress1)
-        _ <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy)
-        _ <- Nodes.addNode(nodeAddress2)
-        _ <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy)
+        _ <- Nodes.addNode(nodeAddress1).commit
+        _ <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
+        _ <- Nodes.addNode(nodeAddress2).commit
+        _ <- Nodes.changeNodeState(nodeAddress2, NodeState.Healthy).commit
         _ <- TestClock.adjust(10.seconds)
         _ <- recorder.collectN(1) { case Message.Direct(_, _, msg: PingReq) => msg }
 //        event <- internalEvents.collect {

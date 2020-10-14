@@ -2,29 +2,29 @@ package zio.memberlist
 
 import java.util.concurrent.TimeUnit
 
-import zio.clock.{ currentTime, Clock }
+import zio.clock.{Clock, currentTime}
 import zio.duration._
-import zio.logging.{ Logger, Logging }
+import zio.logging.{Logger, Logging}
 import zio.memberlist.SwimError.SuspicionTimeoutCancelled
-import zio.stm.{ STM, TMap, TQueue }
-import zio.{ UIO, URIO, ZIO, ZLayer }
+import zio.stm._
+import zio.{URIO, ZIO, ZLayer}
 
 object SuspicionTimeout {
 
   trait Service {
     def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R, Error, A]
-    def cancelTimeout(node: NodeAddress): UIO[Unit]
-    def incomingSuspect(node: NodeAddress, from: NodeAddress): UIO[Unit]
+    def cancelTimeout(node: NodeAddress): USTM[Unit]
+    def incomingSuspect(node: NodeAddress, from: NodeAddress): USTM[Unit]
   }
 
   def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R with SuspicionTimeout, Error, A] =
     ZIO.accessM[SuspicionTimeout with R](_.get.registerTimeout(node)(action))
 
-  def incomingSuspect(node: NodeAddress, from: NodeAddress): URIO[SuspicionTimeout, Unit] =
-    ZIO.accessM[SuspicionTimeout](_.get.incomingSuspect(node, from))
+  def incomingSuspect(node: NodeAddress, from: NodeAddress): URSTM[SuspicionTimeout, Unit] =
+    ZSTM.accessM[SuspicionTimeout](_.get.incomingSuspect(node, from))
 
-  def cancelTimeout(node: NodeAddress): URIO[SuspicionTimeout, Unit] =
-    ZIO.accessM[SuspicionTimeout](_.get.cancelTimeout(node))
+  def cancelTimeout(node: NodeAddress): URSTM[SuspicionTimeout, Unit] =
+    ZSTM.accessM[SuspicionTimeout](_.get.cancelTimeout(node))
 
   private case class SuspicionTimeoutEntry(
     start: Long,
@@ -52,7 +52,7 @@ object SuspicionTimeout {
 
           new Service {
 
-            override def cancelTimeout(node: NodeAddress): UIO[Unit] =
+            override def cancelTimeout(node: NodeAddress): USTM[Unit] =
               store
                 .get(node)
                 .flatMap[Any, Nothing, Unit] {
@@ -60,7 +60,6 @@ object SuspicionTimeout {
                     entry.queue.offer(false)
                   case None => STM.unit
                 }
-                .commit
                 .unit
 
             override def registerTimeout[R, A](node: NodeAddress)(action: ZIO[R, Error, A]): ZIO[R, Error, A] =
@@ -68,7 +67,7 @@ object SuspicionTimeout {
                 queue <- TQueue
                           .bounded[Boolean](1)
                           .commit
-                numberOfNodes <- nodes.numberOfNodes
+                numberOfNodes <- nodes.numberOfNodes.commit
                 currentTime   <- clock.currentTime(TimeUnit.MILLISECONDS)
                 nodeScale     = math.max(1.0, math.log10(math.max(1.0, numberOfNodes.toDouble)))
                 min           = protocolInterval * suspicionAlpha.toDouble * nodeScale
@@ -106,7 +105,7 @@ object SuspicionTimeout {
                          }
               } yield result
 
-            override def incomingSuspect(node: NodeAddress, from: NodeAddress): UIO[Unit] =
+            override def incomingSuspect(node: NodeAddress, from: NodeAddress): USTM[Unit] =
               store
                 .get(node)
                 .flatMap {
@@ -115,7 +114,7 @@ object SuspicionTimeout {
                       entry.queue.offer(true)
                   case _ => STM.unit
                 }
-                .commit
+
           }
       }
   )

@@ -1,16 +1,14 @@
 package zio.memberlist
 
-import java.util.concurrent.TimeUnit
-
-import zio.clock.{ currentTime, Clock }
+import zio.clock.Clock
 import zio.duration._
 import zio.logging.Logging
+import zio.memberlist.Nodes.NodeState
 import zio.memberlist.SwimError.SuspicionTimeoutCancelled
 import zio.test.Assertion.{ equalTo, isLeft }
-import zio.test.TestAspect.flaky
 import zio.test.environment.TestClock
 import zio.test.{ assert, suite, testM }
-import zio.{ Promise, ZIO, ZLayer }
+import zio.{ ZIO, ZLayer }
 
 object SuspicionTimeoutSpec extends KeeperSpec {
 
@@ -32,53 +30,44 @@ object SuspicionTimeoutSpec extends KeeperSpec {
   val spec = suite("Suspicion timeout")(
     testM("schedule timeout with 100 nodes cluster") {
       for {
-        promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
-        node    = NodeAddress(Array(1, 1, 1, 1), 1111)
-        start   <- currentTime(TimeUnit.MILLISECONDS)
-        _ <- SuspicionTimeout
-              .registerTimeout(node)(
-                currentTime(TimeUnit.MILLISECONDS).flatMap(current => promise.succeed(current - start))
-              )
-              .fork
+        _           <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
+        node        = NodeAddress(Array(1, 2, 3, 4), 1)
+        _           <- Nodes.changeNodeState(node, NodeState.Suspicion).commit
+        timeout     <- SuspicionTimeout.registerTimeout(node).commit
+        _           <- timeout.awaitStart
+        _           <- timeout.awaitAction.fork
         _           <- TestClock.adjust(50000.milliseconds)
-        elapsedTime <- promise.await
-      } yield assert(elapsedTime)(equalTo(4000L))
+        elapsedTime <- timeout.elapsedTimeMs
+        nodeStatus  <- Nodes.nodeState(node).commit
+      } yield assert(elapsedTime)(equalTo(4000L)) && assert(nodeStatus)(equalTo(NodeState.Dead))
     }.provideCustomLayer(testLayer(1.second, 1, 2, 3)),
     testM("timeout should be decreased when another confirmation arrives") {
       for {
-        promise <- Promise.make[Nothing, Long]
         _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
         node    = NodeAddress(Array(1, 1, 1, 1), 1111)
         other   = NodeAddress(Array(2, 1, 1, 1), 1111)
-        start   <- currentTime(TimeUnit.MILLISECONDS)
-        _ <- SuspicionTimeout
-              .registerTimeout(node)(
-                currentTime(TimeUnit.MILLISECONDS).flatMap(current => promise.succeed(current - start))
-              )
-              .fork
+        timeout <- SuspicionTimeout.registerTimeout(node).commit
+        _       <- timeout.awaitStart
+
+        fiber       <- timeout.awaitAction.fork
         _           <- TestClock.adjust(150.milliseconds)
         _           <- SuspicionTimeout.incomingSuspect(node, other).commit
         _           <- TestClock.adjust(50000.milliseconds)
-        elapsedTime <- promise.await
+        _           <- fiber.join
+        elapsedTime <- timeout.elapsedTimeMs
       } yield assert(elapsedTime)(equalTo(3000L))
-    }.provideCustomLayer(testLayer(1.second, 1, 2, 3)) @@ flaky,
+    }.provideCustomLayer(testLayer(1.second, 1, 2, 3)) /*@@ flaky*/,
     testM("should be able to cancel") {
       for {
-        promise <- Promise.make[Nothing, Long]
-        _       <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
-        node    = NodeAddress(Array(1, 1, 1, 1), 1111)
-        start   <- currentTime(TimeUnit.MILLISECONDS)
-        timeoutFiber <- SuspicionTimeout
-                         .registerTimeout(node)(
-                           currentTime(TimeUnit.MILLISECONDS).flatMap(current => promise.succeed(current - start))
-                         )
-                         .either
-                         .fork
-        _   <- TestClock.adjust(150.milliseconds)
-        _   <- SuspicionTimeout.cancelTimeout(node).commit
-        _   <- TestClock.adjust(50000.milliseconds)
-        res <- timeoutFiber.join
+        _            <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
+        node         = NodeAddress(Array(1, 1, 1, 1), 1111)
+        timeout      <- SuspicionTimeout.registerTimeout(node).commit
+        _            <- timeout.awaitStart
+        timeoutFiber <- timeout.awaitAction.either.fork
+        _            <- TestClock.adjust(150.milliseconds)
+        _            <- SuspicionTimeout.cancelTimeout(node).commit
+        _            <- TestClock.adjust(50000.milliseconds)
+        res          <- timeoutFiber.join
       } yield assert(res)(isLeft(equalTo(SuspicionTimeoutCancelled(node))))
     }.provideCustomLayer(testLayer(1.second, 1, 2, 3))
   )

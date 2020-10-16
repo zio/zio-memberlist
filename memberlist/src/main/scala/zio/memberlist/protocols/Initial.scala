@@ -3,10 +3,10 @@ package zio.memberlist.protocols
 import upickle.default._
 import zio.ZIO
 import zio.logging._
-import zio.memberlist.Nodes.{NodeState, _}
+import zio.memberlist.Nodes.{ NodeState, _ }
 import zio.memberlist.discovery._
 import zio.memberlist.encoding.ByteCodec
-import zio.memberlist.{NodeAddress, Protocol, _}
+import zio.memberlist.{ NodeAddress, Protocol, _ }
 import zio.stm.ZSTM
 import zio.stream.ZStream
 
@@ -48,7 +48,8 @@ object Initial {
               .orElse(
                 addNode(addr) *>
                   changeNodeState(addr, NodeState.Healthy)
-          )) *> Message.direct(addr, Accept).map(accept => Message.Batch[Initial](accept, Message.Broadcast(join)))
+              )
+          ) *> Message.direct(addr, Accept).map(accept => Message.Batch[Initial](accept, Message.Broadcast(join)))
 
         case Message.Direct(sender, _, Accept) =>
           ZSTM.atomically(

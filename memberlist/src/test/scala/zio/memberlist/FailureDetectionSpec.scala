@@ -64,12 +64,15 @@ object FailureDetectionSpec extends KeeperSpec {
     // I will ignore it for now, but it needs to be addressed in the future.
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
-        recorder  <- ProtocolRecorder[FailureDetection]()
-        _         <- Nodes.addNode(nodeAddress1).commit
-        _         <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
-        _         <- TestClock.adjust(1500.milliseconds)
-        messages  <- recorder.collectN(2) { case msg => msg }
-        nodeState <- Nodes.nodeState(nodeAddress1).orElseSucceed(NodeState.Dead).commit // in case it was cleaned up already
+        recorder <- ProtocolRecorder[FailureDetection]()
+        _        <- Nodes.addNode(nodeAddress1).commit
+        _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Healthy).commit
+        _        <- TestClock.adjust(1500.milliseconds)
+        messages <- recorder.collectN(2) { case msg => msg }
+        nodeState <- Nodes
+                      .nodeState(nodeAddress1)
+                      .orElseSucceed(NodeState.Dead)
+                      .commit // in case it was cleaned up already
       } yield assert(messages)(equalTo(List(Message.Direct(nodeAddress1, 1, Ping), Message.NoResponse))) &&
         assert(nodeState)(equalTo(NodeState.Dead))
     }.provideCustomLayer(testLayer) @@ ignore,

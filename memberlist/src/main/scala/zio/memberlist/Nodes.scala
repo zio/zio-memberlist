@@ -4,9 +4,9 @@ import zio.ZLayer
 import zio.clock.Clock
 import zio.logging.Logging
 import zio.memberlist.ClusterError.UnknownNode
-import zio.memberlist.MembershipEvent.{Join, Leave}
+import zio.memberlist.MembershipEvent.{ Join, Leave }
 import zio.stm._
-import zio.stream.{Stream, ZStream}
+import zio.stream.{ Stream, ZStream }
 
 object Nodes {
 
@@ -93,9 +93,9 @@ object Nodes {
   val live: ZLayer[Logging with Clock, Nothing, Nodes] =
     ZLayer.fromEffect(
       for {
-        nodeStates          <- TMap.empty[NodeAddress, NodeState].commit
-        eventsQueue         <- TQueue.bounded[MembershipEvent](100).commit
-        roundRobinOffset    <- TRef.make(0).commit
+        nodeStates       <- TMap.empty[NodeAddress, NodeState].commit
+        eventsQueue      <- TQueue.bounded[MembershipEvent](100).commit
+        roundRobinOffset <- TRef.make(0).commit
       } yield new Nodes.Service {
 
         def addNode(node: NodeAddress): USTM[Unit] =
@@ -105,18 +105,19 @@ object Nodes {
             .unit
 
         def changeNodeState(id: NodeAddress, newState: NodeState): STM[Error, Unit] =
-          nodeState(id).flatMap {
-            prev =>
-              ZSTM.when(prev != newState) {
-                nodeStates
-                  .put(id, newState)
-                  .tap { _ =>
-                    ZSTM.whenCase(newState) {
+          nodeState(id).flatMap { prev =>
+            ZSTM.when(prev != newState) {
+              nodeStates
+                .put(id, newState)
+                .tap { _ =>
+                  ZSTM
+                    .whenCase(newState) {
                       case NodeState.Healthy if prev == NodeState.Init => eventsQueue.offer(Join(id))
                       case NodeState.Dead | NodeState.Left             => eventsQueue.offer(Leave(id))
-                    }.unit
-                  }
-              }
+                    }
+                    .unit
+                }
+            }
           }
 
         def disconnect(id: NodeAddress): STM[Error, Unit] =
@@ -126,16 +127,16 @@ object Nodes {
           ZStream.fromTQueue(eventsQueue)
 
         def next(
-                  exclude: Option[NodeAddress]
-                ): USTM[Option[(NodeAddress, NodeState)]] /*(exclude: List[NodeId] = Nil)*/ =
+          exclude: Option[NodeAddress]
+        ): USTM[Option[(NodeAddress, NodeState)]] /*(exclude: List[NodeId] = Nil)*/ =
           for {
             list <- nodeStates.toList
-              .map(
-                _.filter(entry =>
-                  (entry._2 == NodeState.Healthy || entry._2 == NodeState.Suspicion) && !exclude
-                    .contains(entry._1)
-                )
-              )
+                     .map(
+                       _.filter(entry =>
+                         (entry._2 == NodeState.Healthy || entry._2 == NodeState.Suspicion) && !exclude
+                           .contains(entry._1)
+                       )
+                     )
 
             nextIndex <- roundRobinOffset.updateAndGet(old => if (old < list.size - 1) old + 1 else 0)
             _         <- nodeStates.removeIf((_, v) => v == NodeState.Dead).when(nextIndex == 0)

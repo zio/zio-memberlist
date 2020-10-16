@@ -3,9 +3,9 @@ package zio.memberlist.protocols
 import upickle.default._
 import zio.clock.Clock
 import zio.duration._
+import zio.logging._
 import zio.memberlist.Nodes._
 import zio.memberlist._
-import zio.logging._
 import zio.memberlist.encoding.ByteCodec
 import zio.stm.{ STM, TMap, TSet }
 import zio.stream.ZStream
@@ -123,7 +123,8 @@ object FailureDetection {
                 STM.unit
               case _ =>
                 changeNodeState(node, NodeState.Suspicion).ignore
-            }.commit *> Message.noResponse
+            }
+            .commit *> Message.noResponse
 
         case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
           changeNodeState(nodeAddress, NodeState.Left).ignore.commit
@@ -216,16 +217,12 @@ object FailureDetection {
             .commit)
           .whenM(pendingNacks.contains(conversationId).commit) *>
           changeNodeState(probedNode, NodeState.Suspicion).commit *>
-          Message.withTimeout(
+          Message.withTimeout[SuspicionTimeout, FailureDetection](
             Message.Broadcast(Suspect(localNode, probedNode)),
             SuspicionTimeout
-              .registerTimeout(probedNode) {
-                ZIO.ifM(nodeState(probedNode).commit.map(_ == NodeState.Suspicion).orElseSucceed(false))(
-                  changeNodeState(probedNode, NodeState.Dead)
-                    .as(Message.Broadcast(Dead(probedNode))).commit,
-                  Message.noResponse
-                )
-              }
+              .registerTimeout(probedNode)
+              .commit
+              .flatMap(_.awaitAction)
               .orElse(Message.noResponse),
             Duration.Zero
           )

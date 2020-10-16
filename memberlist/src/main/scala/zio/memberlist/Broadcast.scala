@@ -24,7 +24,8 @@ final class Broadcast(
           .flatMap[Any, Nothing, Unit](seqId =>
             ref.update(items => items ++ TreeSet(Item(seqId, resent, message.message)))
           )
-      ).commit
+      )
+      .commit
 
   def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>

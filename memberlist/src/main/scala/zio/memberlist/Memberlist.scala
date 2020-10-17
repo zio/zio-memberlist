@@ -80,7 +80,7 @@ object Memberlist {
           }
 
         override def send(data: B, receipt: NodeAddress): UIO[Unit] =
-          Message.direct(receipt, data).provide(env).flatMap(userOut.offer(_).unit)
+          Message.direct(receipt, data).commit.provide(env).flatMap(userOut.offer(_).unit)
 
         override def events: Stream[Nothing, MembershipEvent] =
           env.get[Nodes.Service].events

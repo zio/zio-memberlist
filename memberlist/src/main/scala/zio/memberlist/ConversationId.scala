@@ -1,24 +1,25 @@
 package zio.memberlist
 
-import zio.{ Ref, UIO, ULayer, URIO, ZIO, ZLayer }
+import zio.stm.{ TRef, URSTM, USTM, ZSTM }
+import zio.{ ULayer, ZLayer }
 
 object ConversationId {
 
   trait Service {
-    val next: UIO[Long]
+    val next: USTM[Long]
   }
 
-  val next: URIO[ConversationId, Long] =
-    ZIO.accessM[ConversationId](_.get.next)
+  val next: URSTM[ConversationId, Long] =
+    ZSTM.accessM[ConversationId](_.get.next)
 
   def live: ULayer[ConversationId] =
     ZLayer.fromEffect(
-      Ref
-        .make[Long](0)
+      TRef
+        .makeCommit[Long](0)
         .map(ref =>
           new ConversationId.Service {
 
-            override val next: zio.UIO[Long] =
+            override val next: USTM[Long] =
               ref.updateAndGet(_ + 1)
           }
         )

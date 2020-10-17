@@ -18,7 +18,7 @@ object User {
     userOut: zio.Queue[Message.Direct[B]]
   ): ZIO[ConversationId, Error, Protocol[User[B]]] =
     Protocol[User[B]].make(
-      msg => Message.direct(msg.node, msg.message.msg).flatMap(userIn.offer).as(Message.NoResponse),
+      msg => Message.direct(msg.node, msg.message.msg).commit.flatMap(userIn.offer).as(Message.NoResponse),
       ZStream
         .fromQueue(userOut)
         .collect {

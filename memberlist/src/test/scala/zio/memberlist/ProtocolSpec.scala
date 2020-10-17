@@ -12,7 +12,7 @@ object ProtocolSpec extends KeeperSpec {
   val protocolDefinition = Protocol[PingPong].make(
     {
       case Message.Direct(sender, _, Ping(i)) =>
-        Message.direct(sender, Pong(i))
+        Message.direct(sender, Pong(i)).commit
       case _ => Message.noResponse
     },
     ZStream.empty

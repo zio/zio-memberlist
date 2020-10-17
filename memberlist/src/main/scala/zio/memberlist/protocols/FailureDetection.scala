@@ -7,7 +7,7 @@ import zio.logging._
 import zio.memberlist.Nodes._
 import zio.memberlist._
 import zio.memberlist.encoding.ByteCodec
-import zio.stm.{ STM, TMap }
+import zio.stm.{ STM, TMap, ZSTM }
 import zio.stream.ZStream
 import zio.{ Schedule, ZIO }
 
@@ -66,13 +66,15 @@ object FailureDetection {
       {
         case Message.Direct(sender, conversationId, Ack) =>
           log.debug(s"received ack[$conversationId] from $sender") *>
-            MessageAcknowledge.ack(Ack, conversationId).commit *>
-            pingReqs.get(conversationId).commit.map {
-              case Some((originalNode, originalConversation)) =>
-                Message.Direct(originalNode, originalConversation, Ack)
-              case None =>
-                Message.NoResponse
-            } <* LocalHealthMultiplier.decrease
+            ZSTM.atomically(
+              MessageAcknowledge.ack(Ack, conversationId) *>
+                pingReqs.get(conversationId).map {
+                  case Some((originalNode, originalConversation)) =>
+                    Message.Direct(originalNode, originalConversation, Ack)
+                  case None =>
+                    Message.NoResponse
+                } <* LocalHealthMultiplier.decrease
+            )
 
         case Message.Direct(sender, conversationId, Ping) =>
           ZIO.succeedNow(Message.Direct(sender, conversationId, Ack))
@@ -81,7 +83,7 @@ object FailureDetection {
           Message
             .direct(to, Ping)
             .flatMap(ping =>
-              pingReqs.put(ping.conversationId, (sender, originalAck)).commit *>
+              pingReqs.put(ping.conversationId, (sender, originalAck)) *>
                 Message.withTimeout(
                   message = ping,
                   action = pingReqs
@@ -98,19 +100,22 @@ object FailureDetection {
                   timeout = protocolTimeout
                 )
             )
+            .commit
         case Message.Direct(_, conversationId, Nack) =>
           MessageAcknowledge.ack(Nack, conversationId).commit *>
             Message.noResponse
 
         case Message.Direct(sender, _, Suspect(_, `localNode`)) =>
-          Message
-            .direct(sender, Alive(localNode))
-            .map(
-              Message.Batch(
-                _,
-                Message.Broadcast(Alive(localNode))
-              )
-            ) <* LocalHealthMultiplier.increase
+          ZSTM.atomically(
+            Message
+              .direct(sender, Alive(localNode))
+              .map(
+                Message.Batch(
+                  _,
+                  Message.Broadcast(Alive(localNode))
+                )
+              ) <* LocalHealthMultiplier.increase
+          )
 
         case Message.Direct(from, _, Suspect(_, node)) =>
           nodeState(node)
@@ -118,7 +123,7 @@ object FailureDetection {
             .flatMap {
               case NodeState.Suspicion =>
                 SuspicionTimeout.incomingSuspect(node, from)
-              case NodeState.Dead | NodeState.Suspicion =>
+              case NodeState.Dead =>
                 STM.unit
               case _ =>
                 changeNodeState(node, NodeState.Suspicion).ignore
@@ -126,46 +131,54 @@ object FailureDetection {
             .commit *> Message.noResponse
 
         case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
-          changeNodeState(nodeAddress, NodeState.Left).ignore.commit
+          changeNodeState(nodeAddress, NodeState.Left).ignore
             .as(Message.Broadcast(msg))
+            .commit
 
         case Message.Direct(_, _, msg @ Dead(nodeAddress)) =>
-          nodeState(nodeAddress).orElseSucceed(NodeState.Dead).commit.flatMap {
-            case NodeState.Dead => Message.noResponse
-            case _ =>
-              changeNodeState(nodeAddress, NodeState.Dead).ignore.commit
-                .as(Message.Broadcast(msg))
-          }
+          nodeState(nodeAddress)
+            .orElseSucceed(NodeState.Dead)
+            .flatMap {
+              case NodeState.Dead =>
+                STM.succeed(Message.NoResponse)
+              case _ =>
+                changeNodeState(nodeAddress, NodeState.Dead).ignore
+                  .as(Message.Broadcast(msg))
+            }
+            .commit
 
         case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
-          (SuspicionTimeout.cancelTimeout(nodeAddress) *>
-            changeNodeState(nodeAddress, NodeState.Healthy).ignore
-              .as(Message.Broadcast(msg))).commit
+          ZSTM.atomically(
+            SuspicionTimeout.cancelTimeout(nodeAddress) *>
+              changeNodeState(nodeAddress, NodeState.Healthy).ignore
+                .as(Message.Broadcast(msg))
+          )
       },
       ZStream
         .repeatEffectWith(
-          nextNode().commit.zip(ConversationId.next),
-          Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod))
+          nextNode().zip(ConversationId.next).commit,
+          Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod).commit)
         )
         .collectM {
           case (Some((probedNode, state)), conversationId) =>
-            MessageAcknowledge.register(Ack, conversationId).commit *>
-              Message.withScaledTimeout(
-                if (state != NodeState.Healthy)
-                  Message.Batch(
+            ZSTM.atomically(
+              MessageAcknowledge.register(Ack, conversationId) *>
+                Message.withScaledTimeout(
+                  if (state != NodeState.Healthy)
+                    Message.Batch(
+                      Message.Direct(probedNode, conversationId, Ping),
+                      //this is part of buddy system
+                      Message.Direct(probedNode, conversationId, Suspect(localNode, probedNode))
+                    )
+                  else
                     Message.Direct(probedNode, conversationId, Ping),
-                    //this is part of buddy system
-                    Message.Direct(probedNode, conversationId, Suspect(localNode, probedNode))
-                  )
-                else
-                  Message.Direct(probedNode, conversationId, Ping),
-                pingTimeoutAction(
-                  conversationId,
-                  probedNode
-                ),
-                protocolTimeout
-              )
-
+                  pingTimeoutAction(
+                    conversationId,
+                    probedNode
+                  ),
+                  protocolTimeout
+                )
+            )
         }
     )
 
@@ -182,24 +195,25 @@ object FailureDetection {
       ZIO.ifM(MessageAcknowledge.isCompleted(Ack, conversationId).commit)(
         Message.noResponse,
         log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
-          LocalHealthMultiplier.increase *>
-          nextNode(Some(probedNode)).commit.flatMap {
-            case Some((next, _)) =>
-              MessageAcknowledge.register(Nack, conversationId).commit *>
-                Message.withScaledTimeout(
-                  Message.Direct(next, conversationId, PingReq(probedNode)),
-                  pingReqTimeoutAction(
-                    conversationId,
-                    probedNode
-                  ),
-                  protocolTimeout
-                )
+          ZSTM.atomically(
+            LocalHealthMultiplier.increase *>
+              nextNode(Some(probedNode)).flatMap {
+                case Some((next, _)) =>
+                  MessageAcknowledge.register(Nack, conversationId) *>
+                    Message.withScaledTimeout(
+                      Message.Direct(next, conversationId, PingReq(probedNode)),
+                      pingReqTimeoutAction(
+                        conversationId,
+                        probedNode
+                      ),
+                      protocolTimeout
+                    )
 
-            case None =>
-              // we don't know any other node to ask
-              changeNodeState(probedNode, NodeState.Dead).commit *>
-                Message.noResponse
-          }
+                case None =>
+                  // we don't know any other node to ask
+                  changeNodeState(probedNode, NodeState.Dead).as(Message.NoResponse)
+              }
+          )
       )
 
     private def pingReqTimeoutAction(
@@ -210,19 +224,21 @@ object FailureDetection {
     ]] =
       ZIO.ifM(MessageAcknowledge.isCompleted(Ack, conversationId).commit)(
         Message.noResponse,
-        MessageAcknowledge.ack(Ack, conversationId).commit *> (LocalHealthMultiplier.increase *>
-          MessageAcknowledge.ack(Nack, conversationId).commit)
-          .whenM(MessageAcknowledge.isCompleted(Nack, conversationId).commit.map(!_)) *>
-          changeNodeState(probedNode, NodeState.Suspicion).commit *>
-          Message.withTimeout[SuspicionTimeout, FailureDetection](
-            Message.Broadcast(Suspect(localNode, probedNode)),
-            SuspicionTimeout
-              .registerTimeout(probedNode)
-              .commit
-              .flatMap(_.awaitAction)
-              .orElse(Message.noResponse),
-            Duration.Zero
-          )
+        ZSTM.atomically(
+          MessageAcknowledge.ack(Ack, conversationId) *>
+            (LocalHealthMultiplier.increase *> MessageAcknowledge.ack(Nack, conversationId))
+              .whenM(MessageAcknowledge.isCompleted(Nack, conversationId).map(!_)) *>
+            changeNodeState(probedNode, NodeState.Suspicion) *>
+            Message.withTimeout[SuspicionTimeout, FailureDetection](
+              Message.Broadcast(Suspect(localNode, probedNode)),
+              SuspicionTimeout
+                .registerTimeout(probedNode)
+                .commit
+                .flatMap(_.awaitAction)
+                .orElse(Message.noResponse),
+              Duration.Zero
+            )
+        )
       )
   }
 

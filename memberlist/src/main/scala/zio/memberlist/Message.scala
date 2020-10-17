@@ -2,6 +2,7 @@ package zio.memberlist
 
 import zio.duration.Duration
 import zio.memberlist.Message._
+import zio.stm.ZSTM
 import zio.{ IO, UIO, ZIO }
 
 sealed trait Message[+A] {
@@ -40,21 +41,25 @@ object Message {
       extends Message[A]
   case object NoResponse extends Message[Nothing]
 
-  def direct[A](node: NodeAddress, message: A): ZIO[ConversationId, Nothing, Direct[A]] =
+  def direct[A](node: NodeAddress, message: A): ZSTM[ConversationId, Nothing, Direct[A]] =
     ConversationId.next.map(Direct(node, _, message))
 
   def withTimeout[R, A](
     message: Message[A],
     action: ZIO[R, Error, Message[A]],
     timeout: Duration
-  ): ZIO[R, Nothing, WithTimeout[A]] =
+  ): ZSTM[R, Nothing, WithTimeout[A]] =
     for {
-      env <- ZIO.environment[R]
+      env <- ZSTM.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
 
-  def withScaledTimeout[R, A](message: Message[A], action: ZIO[R, Error, Message[A]], timeout: Duration) =
+  def withScaledTimeout[R, A](
+    message: Message[A],
+    action: ZIO[R, Error, Message[A]],
+    timeout: Duration
+  ): ZSTM[LocalHealthMultiplier with R, Nothing, WithTimeout[A]] =
     for {
-      env    <- ZIO.environment[R]
+      env    <- ZSTM.environment[R]
       scaled <- LocalHealthMultiplier.scaleTimeout(timeout)
     } yield WithTimeout(message, action.provide(env), scaled)
 

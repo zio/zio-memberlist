@@ -48,8 +48,10 @@ object Initial {
               .orElse(
                 addNode(addr) *>
                   changeNodeState(addr, NodeState.Healthy)
-              )
-          ) *> Message.direct(addr, Accept).map(accept => Message.Batch[Initial](accept, Message.Broadcast(join)))
+              ) *> Message
+              .direct(addr, Accept)
+              .map(accept => Message.Batch[Initial](accept, Message.Broadcast(join)))
+          )
 
         case Message.Direct(sender, _, Accept) =>
           ZSTM.atomically(
@@ -65,7 +67,7 @@ object Initial {
         .mapM { node =>
           NodeAddress
             .fromSocketAddress(node)
-            .flatMap(nodeAddress => Message.direct(nodeAddress, Join(local)))
+            .flatMap(nodeAddress => Message.direct(nodeAddress, Join(local)).commit)
         }
     )
 

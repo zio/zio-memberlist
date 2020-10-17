@@ -7,7 +7,7 @@ import zio.logging._
 import zio.memberlist.Nodes._
 import zio.memberlist._
 import zio.memberlist.encoding.ByteCodec
-import zio.stm.{ STM, TMap, TSet }
+import zio.stm.{ STM, TMap }
 import zio.stream.ZStream
 import zio.{ Schedule, ZIO }
 
@@ -57,7 +57,6 @@ object FailureDetection {
 
   private class ProtocolFactory(
     pingReqs: TMap[Long, (NodeAddress, Long)],
-    pendingNacks: TSet[Long],
     protocolPeriod: Duration,
     protocolTimeout: Duration,
     localNode: NodeAddress
@@ -67,7 +66,7 @@ object FailureDetection {
       {
         case Message.Direct(sender, conversationId, Ack) =>
           log.debug(s"received ack[$conversationId] from $sender") *>
-            MessageAcknowledge.ack(conversationId) *>
+            MessageAcknowledge.ack(Ack, conversationId).commit *>
             pingReqs.get(conversationId).commit.map {
               case Some((originalNode, originalConversation)) =>
                 Message.Direct(originalNode, originalConversation, Ack)
@@ -100,7 +99,7 @@ object FailureDetection {
                 )
             )
         case Message.Direct(_, conversationId, Nack) =>
-          pendingNacks.delete(conversationId).commit *>
+          MessageAcknowledge.ack(Nack, conversationId).commit *>
             Message.noResponse
 
         case Message.Direct(sender, _, Suspect(_, `localNode`)) =>
@@ -150,7 +149,7 @@ object FailureDetection {
         )
         .collectM {
           case (Some((probedNode, state)), conversationId) =>
-            MessageAcknowledge.register(conversationId) *>
+            MessageAcknowledge.register(Ack, conversationId).commit *>
               Message.withScaledTimeout(
                 if (state != NodeState.Healthy)
                   Message.Batch(
@@ -180,13 +179,13 @@ object FailureDetection {
         FailureDetection
       ]
     ] =
-      ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
+      ZIO.ifM(MessageAcknowledge.isCompleted(Ack, conversationId).commit)(
         Message.noResponse,
         log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
           LocalHealthMultiplier.increase *>
           nextNode(Some(probedNode)).commit.flatMap {
             case Some((next, _)) =>
-              pendingNacks.put(conversationId).commit *>
+              MessageAcknowledge.register(Nack, conversationId).commit *>
                 Message.withScaledTimeout(
                   Message.Direct(next, conversationId, PingReq(probedNode)),
                   pingReqTimeoutAction(
@@ -209,13 +208,11 @@ object FailureDetection {
     ): ZIO[Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout, Error, Message[
       FailureDetection
     ]] =
-      ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
+      ZIO.ifM(MessageAcknowledge.isCompleted(Ack, conversationId).commit)(
         Message.noResponse,
-        MessageAcknowledge.ack(conversationId) *> (LocalHealthMultiplier.increase *>
-          pendingNacks
-            .delete(conversationId)
-            .commit)
-          .whenM(pendingNacks.contains(conversationId).commit) *>
+        MessageAcknowledge.ack(Ack, conversationId).commit *> (LocalHealthMultiplier.increase *>
+          MessageAcknowledge.ack(Nack, conversationId).commit)
+          .whenM(MessageAcknowledge.isCompleted(Nack, conversationId).commit.map(!_)) *>
           changeNodeState(probedNode, NodeState.Suspicion).commit *>
           Message.withTimeout[SuspicionTimeout, FailureDetection](
             Message.Broadcast(Suspect(localNode, probedNode)),
@@ -244,11 +241,10 @@ object FailureDetection {
   ): ZIO[Env, Error, Protocol[FailureDetection]] =
     TMap
       .empty[Long, (NodeAddress, Long)]
-      .zip(TSet.empty[Long])
       .commit
       .flatMap {
-        case (pendingAcks, pendingNacks) =>
-          new ProtocolFactory(pendingAcks, pendingNacks, protocolPeriod, protocolTimeout, localNode).make
+        case pendingAcks =>
+          new ProtocolFactory(pendingAcks, protocolPeriod, protocolTimeout, localNode).make
       }
 
 }

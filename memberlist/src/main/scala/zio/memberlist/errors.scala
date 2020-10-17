@@ -77,4 +77,7 @@ object SwimError {
 
   final case class SuspicionTimeoutCancelled(nodeAddress: NodeAddress)
       extends Error(s"Suspicion timeout for node: $nodeAddress has been cancelled")
+
+  final case class SuspicionTimeoutAlreadyStarted(nodeAddress: NodeAddress)
+      extends Error(s"Suspicion timeout for node: $nodeAddress already started")
 }

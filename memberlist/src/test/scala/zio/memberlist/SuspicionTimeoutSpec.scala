@@ -4,7 +4,7 @@ import zio.clock.Clock
 import zio.duration._
 import zio.logging.Logging
 import zio.memberlist.Nodes.NodeState
-import zio.memberlist.SwimError.SuspicionTimeoutCancelled
+import zio.memberlist.SwimError.{ SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled }
 import zio.test.Assertion.{ equalTo, isLeft }
 import zio.test.environment.TestClock
 import zio.test.{ assert, suite, testM }
@@ -69,6 +69,14 @@ object SuspicionTimeoutSpec extends KeeperSpec {
         _            <- TestClock.adjust(50000.milliseconds)
         res          <- timeoutFiber.join
       } yield assert(res)(isLeft(equalTo(SuspicionTimeoutCancelled(node))))
+    }.provideCustomLayer(testLayer(1.second, 1, 2, 3)),
+    testM("should be rejected when already started") {
+      for {
+        _      <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
+        node   = NodeAddress(Array(1, 1, 1, 1), 1111)
+        _      <- SuspicionTimeout.registerTimeout(node).commit
+        result <- SuspicionTimeout.registerTimeout(node).commit.either
+      } yield assert(result)(isLeft(equalTo(SuspicionTimeoutAlreadyStarted(node))))
     }.provideCustomLayer(testLayer(1.second, 1, 2, 3))
   )
 

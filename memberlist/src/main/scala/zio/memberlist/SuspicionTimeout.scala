@@ -6,7 +6,7 @@ import zio.clock.{ currentTime, Clock }
 import zio.duration._
 import zio.logging.{ Logger, Logging }
 import zio.memberlist.Nodes._
-import zio.memberlist.SwimError.SuspicionTimeoutCancelled
+import zio.memberlist.SwimError.{ SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled }
 import zio.memberlist.protocols.FailureDetection
 import zio.memberlist.protocols.FailureDetection.Dead
 import zio.stm.{ TQueue, _ }
@@ -15,12 +15,12 @@ import zio.{ IO, UIO, URIO, ZIO, ZLayer }
 object SuspicionTimeout {
 
   trait Service {
-    def registerTimeout[A](node: NodeAddress): USTM[Timeout]
+    def registerTimeout[A](node: NodeAddress): STM[SuspicionTimeoutAlreadyStarted, Timeout]
     def cancelTimeout(node: NodeAddress): USTM[Unit]
     def incomingSuspect(node: NodeAddress, from: NodeAddress): USTM[Unit]
   }
 
-  def registerTimeout[A](node: NodeAddress): URSTM[SuspicionTimeout, Timeout] =
+  def registerTimeout[A](node: NodeAddress): ZSTM[SuspicionTimeout, SuspicionTimeoutAlreadyStarted, Timeout] =
     ZSTM.accessM[SuspicionTimeout](_.get.registerTimeout(node))
 
   def incomingSuspect(node: NodeAddress, from: NodeAddress): URSTM[SuspicionTimeout, Unit] =
@@ -150,8 +150,9 @@ object SuspicionTimeout {
                 }
                 .unit
 
-            override def registerTimeout[A](node: NodeAddress): USTM[Timeout] =
+            override def registerTimeout[A](node: NodeAddress): STM[SuspicionTimeoutAlreadyStarted, Timeout] =
               for {
+                _             <- STM.fail(SuspicionTimeoutAlreadyStarted(node)).whenM(store.contains(node))
                 queue         <- TQueue.bounded[TimeoutCmd](1)
                 numberOfNodes <- nodes.numberOfNodes
                 nodeScale     = math.max(1.0, math.log10(math.max(1.0, numberOfNodes.toDouble)))

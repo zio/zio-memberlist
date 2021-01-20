@@ -31,23 +31,31 @@ object LocalHealthMultiplier {
   def scaleTimeout(timeout: Duration): URSTM[LocalHealthMultiplier, Duration] =
     ZSTM.accessM[LocalHealthMultiplier](_.get.scaleTimeout(timeout))
 
+  private def live0(max: Int): UIO[LocalHealthMultiplier.Service] =
+    TRef
+      .makeCommit(0)
+      .map(ref =>
+        new Service {
+
+          override def increase: USTM[Unit] =
+            ref.update(current => math.min(current + 1, max))
+
+          override def decrease: USTM[Unit] =
+            ref.update(current => math.max(current - 1, 0))
+
+          override def scaleTimeout(timeout: Duration): USTM[Duration] =
+            ref.get.map(score => timeout * (score.toDouble + 1.0))
+        }
+      )
+
+  val liveWithConfig: ZLayer[Has[MemberlistConfig], Nothing, LocalHealthMultiplier] =
+    ZLayer.fromEffect(
+      zio.config.config[MemberlistConfig].flatMap(config => live0(config.localHealthMaxMultiplier))
+    )
+
   def live(max: Int): ULayer[LocalHealthMultiplier] =
     ZLayer.fromEffect(
-      TRef
-        .makeCommit(0)
-        .map(ref =>
-          new Service {
-
-            override def increase: USTM[Unit] =
-              ref.update(current => math.min(current + 1, max))
-
-            override def decrease: USTM[Unit] =
-              ref.update(current => math.max(current - 1, 0))
-
-            override def scaleTimeout(timeout: Duration): USTM[Duration] =
-              ref.get.map(score => timeout * (score.toDouble + 1.0))
-          }
-        )
+      live0(max)
     )
 
 }

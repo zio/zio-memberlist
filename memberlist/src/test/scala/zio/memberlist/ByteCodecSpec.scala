@@ -9,9 +9,9 @@ object ByteCodecSpec extends DefaultRunnableSpec {
   def spec =
     suite("ByteCodec")(
       //swim failure detection
-      ByteCodecLaws[Ping.type](gens.ping),
-      ByteCodecLaws[Ack.type](gens.ack),
-      ByteCodecLaws[Nack.type](gens.nack),
+      ByteCodecLaws[Ping](gens.ping),
+      ByteCodecLaws[Ack](gens.ack),
+      ByteCodecLaws[Nack](gens.nack),
       ByteCodecLaws[PingReq](gens.pingReq),
       ByteCodecLaws[FailureDetection](gens.failureDetectionProtocol),
       //swim suspicion

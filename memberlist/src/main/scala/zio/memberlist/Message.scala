@@ -10,7 +10,7 @@ sealed trait Message[+A] {
 
   final def transformM[B](fn: A => IO[Error, B]): IO[Error, Message[B]] =
     self match {
-      case msg: Message.Direct[A] =>
+      case msg: Message.BestEffort[A] =>
         fn(msg.message).map(b => msg.copy(message = b))
       case msg: Message.Broadcast[A] =>
         fn(msg.message).map(b => msg.copy(message = b))
@@ -31,7 +31,7 @@ sealed trait Message[+A] {
 
 object Message {
 
-  final case class Direct[A](node: NodeAddress, conversationId: Long, message: A) extends Message[A]
+  final case class BestEffort[A](node: NodeAddress, message: A) extends Message[A]
 
   final case class Batch[A](first: Message[A], second: Message[A], rest: Message[A]*) extends Message[A]
 
@@ -39,10 +39,8 @@ object Message {
 
   final case class WithTimeout[A](message: Message[A], action: IO[Error, Message[A]], timeout: Duration)
       extends Message[A]
-  case object NoResponse extends Message[Nothing]
 
-  def direct[A](node: NodeAddress, message: A): ZSTM[ConversationId, Nothing, Direct[A]] =
-    ConversationId.next.map(Direct(node, _, message))
+  case object NoResponse extends Message[Nothing]
 
   def withTimeout[R, A](
     message: Message[A],

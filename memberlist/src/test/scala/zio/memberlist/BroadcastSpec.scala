@@ -5,11 +5,12 @@ import zio.logging._
 import zio.clock._
 import zio.test.Assertion._
 import zio.test._
+import zio.memberlist.state._
 
 object BroadcastSpec extends KeeperSpec {
 
   val logger    = Logging.console((_, line) => line)
-  val testLayer = ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live)
+  val testLayer = (ZLayer.requires[Clock] ++ logger) >>> Nodes.live(NodeAddress(Array(0,0,0,0), 1111))
 
   def generateMessage(size: Int): Chunk[Byte] =
     Chunk.fromArray(Array.fill[Byte](size)(1))

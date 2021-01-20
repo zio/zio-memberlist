@@ -4,7 +4,7 @@ import upickle.default.{ macroRW, _ }
 import zio._
 import zio.clock.Clock
 import zio.logging.{ log, Logging }
-import zio.memberlist.Messages.WithPiggyback
+import zio.memberlist.ConnectionHandler.WithPiggyback
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.transport.{ Channel, ConnectionLessTransport }
 import zio.stream.{ Take, ZStream }
@@ -16,7 +16,7 @@ import zio.stream.{ Take, ZStream }
  * @param broadcast - broadcast for messages
  * @param transport - UDP transport
  */
-final class Messages(
+final class ConnectionHandler(
   val local: NodeAddress,
   messages: Queue[Take[Error, Message[Chunk[Byte]]]],
   broadcast: Broadcast,
@@ -40,11 +40,11 @@ final class Messages(
           values =>
             ZIO.foreach_(values) { withPiggyback =>
               val take =
-                Take.single(Message.Direct(withPiggyback.node, withPiggyback.conversationId, withPiggyback.message))
+                Take.single(Message.BestEffort(withPiggyback.node, withPiggyback.message))
 
               messages.offer(take) *>
                 ZIO.foreach_(withPiggyback.gossip) { chunk =>
-                  messages.offer(Take.single(Message.Direct(withPiggyback.node, withPiggyback.conversationId, chunk)))
+                  messages.offer(Take.single(Message.BestEffort(withPiggyback.node, chunk)))
                 }
             }
         )
@@ -65,10 +65,10 @@ final class Messages(
   def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging, Error, Unit] =
     msg match {
       case Message.NoResponse => ZIO.unit
-      case Message.Direct(nodeAddress, conversationId, message) =>
+      case Message.BestEffort(nodeAddress, message) =>
         for {
           broadcast     <- broadcast.broadcast(message.size)
-          withPiggyback = WithPiggyback(local, conversationId, message, broadcast)
+          withPiggyback = WithPiggyback(local, message, broadcast)
           chunk         <- ByteCodec[WithPiggyback].toChunk(withPiggyback)
           nodeAddress   <- nodeAddress.socketAddress
           _             <- transport.connect(nodeAddress).use(_.send(chunk))
@@ -109,7 +109,7 @@ final class Messages(
       .collectM {
         case Take(Exit.Success(msgs)) =>
           ZIO.foreach(msgs) {
-            case msg: Message.Direct[Chunk[Byte]] =>
+            case msg: Message.BestEffort[Chunk[Byte]] =>
               Take.fromEffect(protocol.onMessage(msg))
             case _ =>
               ZIO.dieMessage("Something went horribly wrong.")
@@ -127,11 +127,10 @@ final class Messages(
   }
 }
 
-object Messages {
+object ConnectionHandler {
 
   final case class WithPiggyback(
     node: NodeAddress,
-    conversationId: Long,
     message: Chunk[Byte],
     gossip: List[Chunk[Byte]]
   )
@@ -150,12 +149,12 @@ object Messages {
     local: NodeAddress,
     broadcast: Broadcast,
     udpTransport: ConnectionLessTransport.Service
-  ): ZManaged[Logging, TransportError, Messages] =
+  ): ZManaged[Logging, TransportError, ConnectionHandler] =
     for {
       messageQueue <- Queue
                        .bounded[Take[Error, Message[Chunk[Byte]]]](1000)
                        .toManaged(_.shutdown)
-      messages = new Messages(local, messageQueue, broadcast, udpTransport)
+      messages = new ConnectionHandler(local, messageQueue, broadcast, udpTransport)
       _        <- messages.bind
     } yield messages
 

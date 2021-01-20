@@ -14,16 +14,16 @@ object User {
     ev.bimap(User.apply, _.msg)
 
   def protocol[B: ByteCodec](
-    userIn: zio.Queue[Message.Direct[B]],
-    userOut: zio.Queue[Message.Direct[B]]
-  ): ZIO[ConversationId, Error, Protocol[User[B]]] =
+    userIn: zio.Queue[Message.BestEffort[B]],
+    userOut: zio.Queue[Message.BestEffort[B]]
+  ): ZIO[Any, Error, Protocol[User[B]]] =
     Protocol[User[B]].make(
-      msg => Message.direct(msg.node, msg.message.msg).commit.flatMap(userIn.offer).as(Message.NoResponse),
+      msg => userIn.offer(Message.BestEffort(msg.node, msg.message.msg)).as(Message.NoResponse),
       ZStream
         .fromQueue(userOut)
         .collect {
-          case Message.Direct(node, conversationId, msg) =>
-            Message.Direct(node, conversationId, User(msg))
+          case Message.BestEffort(node, msg) =>
+            Message.BestEffort(node, User(msg))
         }
     )
 

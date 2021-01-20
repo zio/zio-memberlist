@@ -3,8 +3,9 @@ package zio
 import zio.stream.ZStream
 
 package object memberlist {
-  type ConversationId        = Has[ConversationId.Service]
-  type Nodes                 = Has[Nodes.Service]
+  type MessageSequence        = Has[MessageSequenceNo.Service]
+  type IncarnationSequence        = Has[IncarnationSequence.Service]
+  type Nodes                 = Has[state.Nodes.Service]
   type MessageAcknowledge    = Has[MessageAcknowledge.Service]
   type SuspicionTimeout      = Has[SuspicionTimeout.Service]
   type Swim[A]               = Has[Memberlist.Service[A]]

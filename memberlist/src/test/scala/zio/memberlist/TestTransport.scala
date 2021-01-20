@@ -1,7 +1,7 @@
 package zio.memberlist
 
 import zio._
-import zio.memberlist.Messages.WithPiggyback
+import zio.memberlist.ConnectionHandler.WithPiggyback
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.transport.{ Bind, Channel, ConnectionLessTransport }
 import zio.nio.core.SocketAddress

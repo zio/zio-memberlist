@@ -7,7 +7,7 @@ Below steps help you run experiment locally with [`kind`][Link-Kind].
 
 ```
 sbt examples/docker:publishLocal
-export ZIO_KEEPER_TAG=$(docker image ls zio-keeper-examples --format "{{.Tag}}" | head -1)
+export TAG=$(docker image ls zio-keeper-examples --format "{{.Tag}}" | head -1)
 
 kind create cluster --name zio-keeper-experiment
 kind --name zio-keeper-experiment load docker-image zio-keeper-examples:$ZIO_KEEPER_TAG

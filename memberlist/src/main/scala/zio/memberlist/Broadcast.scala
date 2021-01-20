@@ -1,6 +1,7 @@
 package zio.memberlist
 
 import zio.memberlist.Broadcast.Item
+import zio.memberlist.state._
 import zio.stm.{ STM, TRef }
 import zio.{ Chunk, UIO, URIO, ZIO }
 

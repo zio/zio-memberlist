@@ -3,7 +3,7 @@ package zio.memberlist
 import zio.clock.Clock
 import zio.duration._
 import zio.logging.Logging
-import zio.memberlist.Nodes.NodeState
+import zio.memberlist.state._
 import zio.memberlist.SwimError.{ SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled }
 import zio.test.Assertion.{ equalTo, isLeft }
 import zio.test.environment.TestClock
@@ -20,7 +20,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
   ) =
-    (ZLayer.requires[Clock] ++ logger) >+> Nodes.live >+> SuspicionTimeout.live(
+    (ZLayer.requires[Clock] ++ logger ++ IncarnationSequence.live) >+> Nodes.live(NodeAddress(Array(0,0,0,0), 1111)) >+> SuspicionTimeout.live(
       protocolInterval,
       suspicionAlpha,
       suspicionBeta,
@@ -32,7 +32,7 @@ object SuspicionTimeoutSpec extends KeeperSpec {
       for {
         _           <- ZIO.foreach(1 to 100)(i => Nodes.addNode(NodeAddress(Array(1, 2, 3, 4), i)).commit)
         node        = NodeAddress(Array(1, 2, 3, 4), 1)
-        _           <- Nodes.changeNodeState(node, NodeState.Suspicion).commit
+        _           <- Nodes.changeNodeState(node, NodeState.Suspect).commit
         timeout     <- SuspicionTimeout.registerTimeout(node).commit
         _           <- timeout.awaitStart
         _           <- timeout.awaitAction.fork

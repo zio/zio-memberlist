@@ -3,7 +3,8 @@ package zio.memberlist.protocols
 import upickle.default._
 import zio.ZIO
 import zio.logging._
-import zio.memberlist.Nodes.{ NodeState, _ }
+import zio.memberlist.state.Nodes._ 
+import zio.memberlist.state.NodeState 
 import zio.memberlist.discovery._
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.{ NodeAddress, Protocol, _ }
@@ -34,31 +35,29 @@ object Initial {
       Reject
     ]
 
-  type Env = ConversationId with Nodes with Logging with Discovery
+  type Env = MessageSequence with Nodes with Logging with Discovery
 
   def protocol(local: NodeAddress): ZIO[Env, Error, Protocol[Initial]] =
     Protocol[Initial].make(
       {
-        case Message.Direct(_, _, Join(addr)) if addr == local =>
+        case Message.BestEffort(_, Join(addr)) if addr == local =>
           Message.noResponse
-        case Message.Direct(_, _, join @ Join(addr)) =>
+        case Message.BestEffort(_, join @ Join(addr)) =>
           ZSTM.atomically(
             nodeState(addr)
               .as(Message.NoResponse)
               .orElse(
                 addNode(addr) *>
-                  changeNodeState(addr, NodeState.Healthy)
-              ) *> Message
-              .direct(addr, Accept)
-              .map(accept => Message.Batch[Initial](accept, Message.Broadcast(join)))
+                  changeNodeState(addr, NodeState.Alive)
+              ).as(Message.Batch[Initial](Message.BestEffort(addr, Accept), Message.Broadcast(join)))
           )
 
-        case Message.Direct(sender, _, Accept) =>
+        case Message.BestEffort(sender, Accept) =>
           ZSTM.atomically(
             addNode(sender) *>
-              changeNodeState(sender, NodeState.Healthy).as(Message.NoResponse)
+              changeNodeState(sender, NodeState.Alive).as(Message.NoResponse)
           )
-        case Message.Direct(sender, _, Reject(msg)) =>
+        case Message.BestEffort(sender, Reject(msg)) =>
           log.error("Rejected from cluster: " + msg) *>
             disconnect(sender).as(Message.NoResponse).commit
       },
@@ -67,7 +66,7 @@ object Initial {
         .mapM { node =>
           NodeAddress
             .fromSocketAddress(node)
-            .flatMap(nodeAddress => Message.direct(nodeAddress, Join(local)).commit)
+            .map(nodeAddress => Message.BestEffort(nodeAddress, Join(local)))
         }
     )
 

@@ -5,12 +5,15 @@ import java.util.concurrent.TimeUnit
 import zio.clock.{ currentTime, Clock }
 import zio.duration._
 import zio.logging.{ Logger, Logging }
-import zio.memberlist.Nodes._
+import zio.memberlist.state.Nodes._
+import zio.memberlist.state._
+import zio.memberlist.state.NodeState
 import zio.memberlist.SwimError.{ SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled }
 import zio.memberlist.protocols.FailureDetection
 import zio.memberlist.protocols.FailureDetection.Dead
 import zio.stm.{ TQueue, _ }
-import zio.{ IO, UIO, URIO, ZIO, ZLayer }
+import zio.{ Has, IO, UIO, URIO, ZIO, ZLayer }
+import zio.config._
 
 object SuspicionTimeout {
 
@@ -44,18 +47,19 @@ object SuspicionTimeout {
     promise: TPromise[Error, Message[FailureDetection]],
     suspicionRequiredConfirmations: Int,
     store: TMap[NodeAddress, SuspicionTimeoutEntry],
-    env: Clock with Nodes with Logging
+    env: Clock with Nodes with Logging with IncarnationSequence
   ) {
 
-    val nodes  = env.get[Nodes.Service]
-    val clock  = env.get[Clock.Service]
-    val logger = env.get[Logger[String]]
+    val nodes              = env.get[Nodes.Service]
+    val clock              = env.get[Clock.Service]
+    val logger             = env.get[Logger[String]]
+    val currentIncarnation = env.get[IncarnationSequence.Service].current
 
     private val action: STM[Error, Message[Dead]] =
       ZSTM
-        .ifM(nodeState(node).map(_ == NodeState.Suspicion).orElseSucceed(false))(
-          changeNodeState(node, NodeState.Dead)
-            .as(Message.Broadcast(Dead(node))),
+        .ifM(nodeState(node).map(_ == NodeState.Suspect).orElseSucceed(false))(
+          changeNodeState(node, NodeState.Dead) *>
+            currentIncarnation.map(incarnation => Message.Broadcast(Dead(incarnation, nodes.localNode, node))),
           ZSTM.succeed(Message.NoResponse)
         )
         .provide(env)
@@ -110,12 +114,12 @@ object SuspicionTimeout {
     case object Cancel                            extends TimeoutCmd
   }
 
-  def live(
+  private def live0(
     protocolInterval: Duration,
     suspicionAlpha: Int,
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
-  ): ZLayer[Clock with Nodes with Logging, Nothing, SuspicionTimeout] = ZLayer.fromEffect(
+  ): ZIO[Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout.Service] =
     TMap
       .empty[NodeAddress, SuspicionTimeoutEntry]
       .commit
@@ -133,7 +137,7 @@ object SuspicionTimeout {
               .fork
           )
       )
-      .zip(ZIO.environment[Clock with Nodes with Logging])
+      .zip(ZIO.environment[Clock with Nodes with Logging with IncarnationSequence])
       .map {
         case ((store, startTimeout), env) =>
           val nodes = env.get[Nodes.Service]
@@ -191,7 +195,28 @@ object SuspicionTimeout {
 
           }
       }
+
+  def live(
+    protocolInterval: Duration,
+    suspicionAlpha: Int,
+    suspicionBeta: Int,
+    suspicionRequiredConfirmations: Int
+  ): ZLayer[Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout] = ZLayer.fromEffect(
+    live0(protocolInterval, suspicionAlpha, suspicionBeta, suspicionRequiredConfirmations)
   )
+
+  val liveWithConfig
+    : ZLayer[Has[MemberlistConfig] with Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout] =
+    ZLayer.fromEffect(
+      config[MemberlistConfig].flatMap(config =>
+        live0(
+          config.protocolInterval,
+          config.suspicionAlpha,
+          config.suspicionBeta,
+          config.suspicionRequiredConfirmations
+        )
+      )
+    )
 
   private def calculateTimeout(
     start: Long,

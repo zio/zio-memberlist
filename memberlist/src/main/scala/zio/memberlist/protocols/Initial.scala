@@ -3,8 +3,8 @@ package zio.memberlist.protocols
 import upickle.default._
 import zio.ZIO
 import zio.logging._
-import zio.memberlist.state.Nodes._ 
-import zio.memberlist.state.NodeState 
+import zio.memberlist.state.Nodes._
+import zio.memberlist.state.NodeState
 import zio.memberlist.discovery._
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.{ NodeAddress, Protocol, _ }
@@ -28,12 +28,12 @@ object Initial {
   implicit val rejectCodec: ByteCodec[Reject] =
     ByteCodec.fromReadWriter(macroRW[Reject])
 
-  implicit val byteCodec: ByteCodec[Initial] =
-    ByteCodec.tagged[Initial][
-      Join,
-      Accept.type,
-      Reject
-    ]
+  //implicit val byteCodec: ByteCodec[Initial] =
+  //  ByteCodec.tagged[Initial][
+  //    Join,
+  //    Accept.type,
+  //    Reject
+  //  ]
 
   type Env = MessageSequence with Nodes with Logging with Discovery
 
@@ -49,7 +49,8 @@ object Initial {
               .orElse(
                 addNode(addr) *>
                   changeNodeState(addr, NodeState.Alive)
-              ).as(Message.Batch[Initial](Message.BestEffort(addr, Accept), Message.Broadcast(join)))
+              )
+              .as(Message.Batch[Initial](Message.BestEffort(addr, Accept), Message.Broadcast(join)))
           )
 
         case Message.BestEffort(sender, Accept) =>

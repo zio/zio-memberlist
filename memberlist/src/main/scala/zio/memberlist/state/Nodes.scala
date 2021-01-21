@@ -10,7 +10,7 @@ import zio.memberlist.MembershipEvent.{ Join, Leave }
 import zio.memberlist.Error
 import zio.stm._
 import zio.stream.{ Stream, ZStream }
-import zio.{ZIO, Has}
+import zio.{ Has, ZIO }
 import zio.memberlist.MemberlistConfig
 import zio.config._
 

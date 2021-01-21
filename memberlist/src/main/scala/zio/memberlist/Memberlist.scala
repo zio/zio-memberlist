@@ -10,6 +10,13 @@ import zio.memberlist.state._
 import zio.memberlist.protocols.{ DeadLetter, FailureDetection, Initial, User }
 import zio.stream.{ Stream, ZStream }
 import zio.{ IO, Queue, UIO, ZLayer, ZManaged }
+import zio.memberlist.protocols.FailureDetection.PingReq
+import zio.memberlist.protocols.FailureDetection.Suspect
+import zio.memberlist.protocols.FailureDetection.Alive
+import zio.memberlist.protocols.FailureDetection.Dead
+import zio.memberlist.protocols.FailureDetection.Ping
+import zio.memberlist.protocols.FailureDetection.Ack
+import zio.memberlist.UnionType._
 
 object Memberlist {
 
@@ -27,6 +34,16 @@ object Memberlist {
   final private[this] val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[Env, Error, Swim[B]] = {
+
+    implicit val codec: ByteCodec[FailureDetection with Initial with User[B]] =
+      ByteCodec.tagged[UNil Or FailureDetection Or Initial Or User[B]][
+        Ping,
+        PingReq,
+        Ack,
+        Suspect,
+        Alive,
+        Dead
+      ]
 
     val internalLayer =
       (ZLayer.requires[Env] ++

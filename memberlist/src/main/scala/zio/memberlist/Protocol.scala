@@ -18,18 +18,19 @@ trait Protocol[M] {
    * @param codec - TaggedCodec that handles serialization to Chunk[Byte]
    * @return - Protocol that operates on Chunk[Byte]
    */
-  final def binary(implicit codec: ByteCodec[M]): Protocol[Chunk[Byte]] =
+  final def binary[A <: M](implicit codec: ByteCodec[A]): Protocol[Chunk[Byte]] =
     new Protocol[Chunk[Byte]] {
+      val lens = codec.lens[M]
 
       override val onMessage: Message.BestEffort[Chunk[Byte]] => IO[Error, Message[Chunk[Byte]]] =
         msg =>
-          ByteCodec
-            .decode[M](msg.message)
+          codec
+            .fromChunk(msg.message)
             .flatMap(decoded => self.onMessage(msg.copy(message = decoded)))
-            .flatMap(_.transformM(ByteCodec.encode[M]))
+            .flatMap(_.transformM(lens.toChunk))
 
       override val produceMessages: Stream[Error, Message[Chunk[Byte]]] =
-        self.produceMessages.mapM(_.transformM(ByteCodec.encode[M]))
+        self.produceMessages.mapM(_.transformM(lens.toChunk))
     }
 
   /**

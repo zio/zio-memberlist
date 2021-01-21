@@ -76,6 +76,6 @@ object NodesSpec extends KeeperSpec {
         )
       )
     }
-  ).provideCustomLayer((ZLayer.requires[Clock] ++ logger) >>> Nodes.live(NodeAddress(Array(0,0,0,0), 1111)))
+  ).provideCustomLayer((ZLayer.requires[Clock] ++ logger) >>> Nodes.live(NodeAddress(Array(0, 0, 0, 0), 1111)))
 
 }

@@ -21,7 +21,6 @@ object gens {
       seqNo <- Gen.anyLong
     } yield Ping(seqNo)
 
-
   val ack: Gen[Random, Ack] =
     for {
       seqNo <- Gen.anyLong

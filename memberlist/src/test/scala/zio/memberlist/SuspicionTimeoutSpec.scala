@@ -20,12 +20,14 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
   ) =
-    (ZLayer.requires[Clock] ++ logger ++ IncarnationSequence.live) >+> Nodes.live(NodeAddress(Array(0,0,0,0), 1111)) >+> SuspicionTimeout.live(
-      protocolInterval,
-      suspicionAlpha,
-      suspicionBeta,
-      suspicionRequiredConfirmations
-    )
+    (ZLayer
+      .requires[Clock] ++ logger ++ IncarnationSequence.live) >+> Nodes.live(NodeAddress(Array(0, 0, 0, 0), 1111)) >+> SuspicionTimeout
+      .live(
+        protocolInterval,
+        suspicionAlpha,
+        suspicionBeta,
+        suspicionRequiredConfirmations
+      )
 
   val spec = suite("Suspicion timeout")(
     testM("schedule timeout with 100 nodes cluster") {

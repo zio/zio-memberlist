@@ -44,6 +44,7 @@ lazy val memberlist =
         "dev.zio"                %% "zio-config"              % zioConfigVersion,
         "com.lihaoyi"            %% "upickle"                 % "1.2.0",
         "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
+        "com.github.xuwei-k"     %% "msgpack4z-native"        % "0.3.6",
         "dev.zio"                %% "zio-test"                % zioVersion % Test,
         "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test,
         ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),

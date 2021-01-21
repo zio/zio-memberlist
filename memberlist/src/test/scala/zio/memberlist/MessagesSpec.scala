@@ -84,5 +84,8 @@ object MessagesSpec extends KeeperSpec {
           } yield assert(m.map(_.gossip.size))(isSome(equalTo(1487))) && assert(bytes.size)(equalTo(62538))
       }
     }
-  ).provideCustomLayer(logger ++ IncarnationSequence.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes.live(NodeAddress(Array(0,0,0,0), 1111))))
+  ).provideCustomLayer(
+    logger ++ IncarnationSequence.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes
+      .live(NodeAddress(Array(0, 0, 0, 0), 1111)))
+  )
 }

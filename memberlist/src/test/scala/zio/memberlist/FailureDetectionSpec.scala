@@ -28,7 +28,8 @@ object FailureDetectionSpec extends KeeperSpec {
       MessageSequenceNo.live ++
       MessageAcknowledge.live ++
       LocalHealthMultiplier.live(9)
-  ) >+> zio.memberlist.state.Nodes.live(NodeAddress(Array(0,0,0,0), 1111)) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
+  ) >+> zio.memberlist.state.Nodes
+    .live(NodeAddress(Array(0, 0, 0, 0), 1111)) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
 
   val recorder =
     ProtocolRecorder
@@ -57,7 +58,7 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(nodeAddress2).commit
         _        <- Nodes.changeNodeState(nodeAddress2, NodeState.Alive).commit
         _        <- TestClock.adjust(100.seconds)
-        messages <- recorder.collectN(3) { case Message.BestEffort(addr, _:Ping) => addr }
+        messages <- recorder.collectN(3) { case Message.BestEffort(addr, _: Ping) => addr }
       } yield assert(messages.toSet)(equalTo(Set(nodeAddress2, nodeAddress1)))
     }.provideCustomLayer(testLayer),
     // The test is passing locally, but for some reasons in CircleCI it always
@@ -100,7 +101,7 @@ object FailureDetectionSpec extends KeeperSpec {
                        Message.BestEffort(nodeAddress2, Ack(seqNo))
                      case Message.BestEffort(`nodeAddress1`, Ping(_)) =>
                        Message.NoResponse //simulate failing node
-                     case Message.BestEffort(`nodeAddress2`,  PingReq(seqNo, _)) =>
+                     case Message.BestEffort(`nodeAddress2`, PingReq(seqNo, _)) =>
                        Message.BestEffort(nodeAddress2, Ack(seqNo))
                    }
         _ <- Nodes.addNode(nodeAddress1).commit

@@ -51,16 +51,16 @@ object FailureDetection {
   implicit val deadCodec: ByteCodec[Dead] =
     ByteCodec.fromReadWriter(macroRW[Dead])
 
-  implicit val byteCodec: ByteCodec[FailureDetection] =
-    ByteCodec.tagged[FailureDetection][
-      Ack,
-      Ping,
-      PingReq,
-      Nack,
-      Suspect,
-      Alive,
-      Dead
-    ]
+  //implicit val byteCodec: ByteCodec[FailureDetection] =
+  //  ByteCodec.tagged[FailureDetection][
+  //    Ack,
+  //    Ping,
+  //    PingReq,
+  //    Nack,
+  //    Suspect,
+  //    Alive,
+  //    Dead
+  //  ]
 
   type Env = LocalHealthMultiplier
     with MessageSequence

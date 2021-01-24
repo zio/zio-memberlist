@@ -8,6 +8,5 @@ object ConnectionLessTransport {
 
   trait Service {
     def bind(localAddr: SocketAddress)(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind]
-    def connect(to: SocketAddress): Managed[TransportError, Channel]
   }
 }

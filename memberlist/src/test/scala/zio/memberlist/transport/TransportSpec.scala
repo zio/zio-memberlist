@@ -2,7 +2,8 @@ package zio.memberlist.transport
 
 import zio._
 import zio.console.{ Console, _ }
-import zio.duration._
+import zio.nio.core.InetAddress
+//import zio.duration._
 import zio.memberlist.TransportError
 import zio.logging.Logging
 import zio.nio.core.SocketAddress
@@ -28,7 +29,7 @@ object TransportSpec extends DefaultRunnableSpec {
           data <- out.read
           _    <- q.offer(data)
         } yield ()
-      }.catchAll(ex => putStrLn("error in server: " + ex).provideLayer(Console.live))
+      }.catchAll(ex => putStrLn("error in server: " + ex.getCause).provideLayer(Console.live))
       p <- bind(addr)(h).use { bind =>
             for {
               address <- bind.localAddress
@@ -42,16 +43,20 @@ object TransportSpec extends DefaultRunnableSpec {
     suite("transport")(
       suite("udp")(
         testM("can send and receive messages") {
-          checkM(Gen.listOf(Gen.anyByte)) { bytes =>
-            val payload = Chunk.fromIterable(bytes)
-            for {
-              addr        <- SocketAddress.inetSocketAddress(0)
-              startServer <- Promise.make[Nothing, SocketAddress]
-              chunk       <- bindAndWaitForValue(addr, startServer).fork
-              address     <- startServer.await
-              _           <- connect(address).use(_.send(payload).retry(Schedule.spaced(10.milliseconds)))
-              result      <- chunk.join
-            } yield assert(result)(equalTo(payload))
+          checkM(Gen.listOf(Gen.anyByte)) {
+            bytes =>
+              val payload = Chunk.fromIterable(bytes)
+              for {
+                localHost   <- InetAddress.localHost
+                serverAddr  <- SocketAddress.inetSocketAddress(localHost, 0)
+                clientAddr  <- SocketAddress.inetSocketAddress(localHost, 0)
+                startServer <- Promise.make[Nothing, SocketAddress]
+                chunk       <- bindAndWaitForValue(serverAddr, startServer).fork
+                address     <- startServer.await
+
+                _      <- bind(clientAddr)(_ => ZIO.unit).use(bind => bind.send(address, payload))
+                result <- chunk.join
+              } yield assert(result)(equalTo(payload))
           }
         }
       ).provideCustomLayer(udpEnv)

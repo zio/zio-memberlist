@@ -73,7 +73,7 @@ object Memberlist {
         deadLetter   <- DeadLetter.protocol.toManaged_
         allProtocols = Protocol.compose(initial.binary, failureDetection, user, deadLetter)
         broadcast0   <- Broadcast.make(localConfig.messageSizeLimit, localConfig.broadcastResent).toManaged_
-        messages0    <- ConnectionHandler.make(localNodeAddress, broadcast0, udpTransport)
+        messages0    <- MessageSink.make(localNodeAddress, broadcast0, udpTransport)
         _            <- messages0.process(allProtocols).toManaged_
       } yield new Memberlist.Service[B] {
 

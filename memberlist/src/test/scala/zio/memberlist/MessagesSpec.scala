@@ -3,7 +3,7 @@ package zio.memberlist
 import zio._
 import zio.clock.Clock
 import zio.logging._
-import zio.memberlist.ConnectionHandler.WithPiggyback
+import zio.memberlist.MessageSink.WithPiggyback
 import zio.memberlist.PingPong._
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.state._
@@ -18,7 +18,7 @@ object MessagesSpec extends KeeperSpec {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
     broadcast <- Broadcast.make(64000, 2).toManaged_
-    messages  <- ConnectionHandler.make(local, broadcast, transport)
+    messages  <- MessageSink.make(local, broadcast, transport)
   } yield (transport, messages)
 
   val spec = suite("messages")(

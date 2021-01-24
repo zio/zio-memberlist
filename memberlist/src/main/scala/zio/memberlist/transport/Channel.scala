@@ -1,7 +1,6 @@
 package zio.memberlist.transport
 
 import java.math.BigInteger
-
 import zio.memberlist.TransportError
 import zio.memberlist.TransportError.ExceptionWrapper
 import zio.{ Chunk, IO, _ }

@@ -1,7 +1,6 @@
 package zio.memberlist
 
 import java.util.concurrent.TimeUnit
-
 import zio.clock.{ currentTime, Clock }
 import zio.duration._
 import zio.logging.{ Logger, Logging }
@@ -9,11 +8,11 @@ import zio.memberlist.state.Nodes._
 import zio.memberlist.state._
 import zio.memberlist.state.NodeState
 import zio.memberlist.SwimError.{ SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled }
-import zio.memberlist.protocols.FailureDetection
-import zio.memberlist.protocols.FailureDetection.Dead
+import zio.memberlist.protocols.messages.FailureDetection.Dead
 import zio.stm.{ TQueue, _ }
 import zio.{ Has, IO, UIO, URIO, ZIO, ZLayer }
 import zio.config._
+import zio.memberlist.protocols.messages.FailureDetection
 
 object SuspicionTimeout {
 

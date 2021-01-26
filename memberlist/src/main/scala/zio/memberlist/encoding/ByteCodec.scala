@@ -9,8 +9,6 @@ import zio.memberlist.SerializationError.{ DeserializationTypeError, Serializati
 import zio.memberlist.encoding.encoding._
 
 import scala.reflect.ClassTag
-import zio.memberlist.UnionType.OrR
-import zio.memberlist.UnionType.Or
 
 trait ByteCodec[A] { self =>
   def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A]
@@ -40,82 +38,89 @@ trait ByteCodec[A] { self =>
   def bimapM[B](f: A => IO[DeserializationTypeError, B], g: B => IO[SerializationTypeError, A]): ByteCodec[B] =
     ByteCodec.instance(self.fromChunk(_).flatMap(f))(g(_).flatMap(self.toChunk))
 
-  def lens[B >: A]: ByteCodec[B] = self.asInstanceOf[ByteCodec[B]]
+  private[ByteCodec] def unsafeWiden[A1 >: A](implicit tag: ClassTag[A]): ByteCodec[A1] =
+    new ByteCodec[A1] {
+
+      def fromChunk(chunk: Chunk[Byte]): IO[DeserializationTypeError, A1] =
+        self.fromChunk(chunk)
+
+      def toChunk(a1: A1): IO[SerializationTypeError, Chunk[Byte]] =
+        a1 match {
+          case a: A => self.toChunk(a)
+          case _    => IO.fail(SerializationTypeError(s"Unsupported type ${a1.getClass}"))
+        }
+    }
 }
 
 object ByteCodec {
 
-  final class TaggedBuilder[AL <: OrR, AR] {
-    type Union         = Or[AL, AR]
-    type Intersect     = Union#intersect
-    type UnionCheck[A] = Union#check[A]
+  final class TaggedBuilder[A] {
 
-    def apply[A1: UnionCheck: ByteCodec: ClassTag]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+    def apply[A1 <: A: ByteCodec: ClassTag]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
         }
       )
 
-    def apply[A1: UnionCheck: ByteCodec: ClassTag, A2: UnionCheck: ByteCodec: ClassTag]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+    def apply[A1 <: A: ByteCodec: ClassTag, A2 <: A: ByteCodec: ClassTag]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
           case _: A3 => 2
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
           case _: A3 => 2
           case _: A4 => 3
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
@@ -123,23 +128,23 @@ object ByteCodec {
           case _: A4 => 3
           case _: A5 => 4
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag,
-      A6: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
@@ -148,25 +153,25 @@ object ByteCodec {
           case _: A5 => 4
           case _: A6 => 5
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
-          case 5 => ByteCodec[A6].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag,
-      A6: UnionCheck: ByteCodec: ClassTag,
-      A7: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
@@ -176,27 +181,27 @@ object ByteCodec {
           case _: A6 => 5
           case _: A7 => 6
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
-          case 5 => ByteCodec[A6].asInstanceOf[ByteCodec[Intersect]]
-          case 6 => ByteCodec[A7].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
         }
       )
 
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag,
-      A6: UnionCheck: ByteCodec: ClassTag,
-      A7: UnionCheck: ByteCodec: ClassTag,
-      A8: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
@@ -207,28 +212,29 @@ object ByteCodec {
           case _: A7 => 6
           case _: A8 => 7
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
-          case 5 => ByteCodec[A6].asInstanceOf[ByteCodec[Intersect]]
-          case 6 => ByteCodec[A7].asInstanceOf[ByteCodec[Intersect]]
-          case 7 => ByteCodec[A8].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
+          case 7 => ByteCodec[A8].unsafeWiden[A]
         }
       )
+
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag,
-      A6: UnionCheck: ByteCodec: ClassTag,
-      A7: UnionCheck: ByteCodec: ClassTag,
-      A8: UnionCheck: ByteCodec: ClassTag,
-      A9: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1 => 0
           case _: A2 => 1
@@ -240,30 +246,31 @@ object ByteCodec {
           case _: A8 => 7
           case _: A9 => 8
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
-          case 5 => ByteCodec[A6].asInstanceOf[ByteCodec[Intersect]]
-          case 6 => ByteCodec[A7].asInstanceOf[ByteCodec[Intersect]]
-          case 7 => ByteCodec[A8].asInstanceOf[ByteCodec[Intersect]]
-          case 8 => ByteCodec[A9].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
+          case 7 => ByteCodec[A8].unsafeWiden[A]
+          case 8 => ByteCodec[A9].unsafeWiden[A]
         }
       )
+
     def apply[
-      A1: UnionCheck: ByteCodec: ClassTag,
-      A2: UnionCheck: ByteCodec: ClassTag,
-      A3: UnionCheck: ByteCodec: ClassTag,
-      A4: UnionCheck: ByteCodec: ClassTag,
-      A5: UnionCheck: ByteCodec: ClassTag,
-      A6: UnionCheck: ByteCodec: ClassTag,
-      A7: UnionCheck: ByteCodec: ClassTag,
-      A8: UnionCheck: ByteCodec: ClassTag,
-      A9: UnionCheck: ByteCodec: ClassTag,
-      A10: UnionCheck: ByteCodec: ClassTag
-    ]: ByteCodec[Intersect] =
-      taggedInstance[Intersect](
+      A1 <: A: ByteCodec: ClassTag,
+      A2 <: A: ByteCodec: ClassTag,
+      A3 <: A: ByteCodec: ClassTag,
+      A4 <: A: ByteCodec: ClassTag,
+      A5 <: A: ByteCodec: ClassTag,
+      A6 <: A: ByteCodec: ClassTag,
+      A7 <: A: ByteCodec: ClassTag,
+      A8 <: A: ByteCodec: ClassTag,
+      A9 <: A: ByteCodec: ClassTag,
+      A10 <: A: ByteCodec: ClassTag
+    ]: ByteCodec[A] =
+      taggedInstance[A](
         {
           case _: A1  => 0
           case _: A2  => 1
@@ -276,16 +283,16 @@ object ByteCodec {
           case _: A9  => 8
           case _: A10 => 9
         }, {
-          case 0 => ByteCodec[A1].asInstanceOf[ByteCodec[Intersect]]
-          case 1 => ByteCodec[A2].asInstanceOf[ByteCodec[Intersect]]
-          case 2 => ByteCodec[A3].asInstanceOf[ByteCodec[Intersect]]
-          case 3 => ByteCodec[A4].asInstanceOf[ByteCodec[Intersect]]
-          case 4 => ByteCodec[A5].asInstanceOf[ByteCodec[Intersect]]
-          case 5 => ByteCodec[A6].asInstanceOf[ByteCodec[Intersect]]
-          case 6 => ByteCodec[A7].asInstanceOf[ByteCodec[Intersect]]
-          case 7 => ByteCodec[A8].asInstanceOf[ByteCodec[Intersect]]
-          case 8 => ByteCodec[A9].asInstanceOf[ByteCodec[Intersect]]
-          case 9 => ByteCodec[A10].asInstanceOf[ByteCodec[Intersect]]
+          case 0 => ByteCodec[A1].unsafeWiden[A]
+          case 1 => ByteCodec[A2].unsafeWiden[A]
+          case 2 => ByteCodec[A3].unsafeWiden[A]
+          case 3 => ByteCodec[A4].unsafeWiden[A]
+          case 4 => ByteCodec[A5].unsafeWiden[A]
+          case 5 => ByteCodec[A6].unsafeWiden[A]
+          case 6 => ByteCodec[A7].unsafeWiden[A]
+          case 7 => ByteCodec[A8].unsafeWiden[A]
+          case 8 => ByteCodec[A9].unsafeWiden[A]
+          case 9 => ByteCodec[A10].unsafeWiden[A]
         }
       )
 
@@ -303,8 +310,8 @@ object ByteCodec {
       override def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]] = g(a)
     }
 
-  def tagged[A <: OrR]: TaggedBuilder[A#L, A#R] =
-    new TaggedBuilder[A#L, A#R]()
+  def tagged[A]: TaggedBuilder[A] =
+    new TaggedBuilder[A]()
 
   def taggedInstance[A](f: PartialFunction[A, Byte], g: PartialFunction[Byte, ByteCodec[A]]): ByteCodec[A] = {
 

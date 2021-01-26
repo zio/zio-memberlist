@@ -3,7 +3,7 @@ package zio.memberlist
 import zio._
 import zio.clock.Clock
 import zio.logging._
-import zio.memberlist.MessageSink.WithPiggyback
+import zio.memberlist.protocols.messages.WithPiggyback
 import zio.memberlist.PingPong._
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.state._
@@ -81,7 +81,7 @@ object MessagesSpec extends KeeperSpec {
             bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
                       ByteCodec[WithPiggyback].toChunk(_)
                     )
-          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1487))) && assert(bytes.size)(equalTo(62538))
+          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1487))) && assert(bytes.size)(equalTo(62593))
       }
     }
   ).provideCustomLayer(

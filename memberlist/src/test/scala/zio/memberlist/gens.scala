@@ -2,8 +2,8 @@ package zio.memberlist
 
 import java.util.UUID
 
-import zio.memberlist.protocols.FailureDetection._
-import zio.memberlist.protocols._
+import zio.memberlist.protocols.messages.FailureDetection._
+import zio.memberlist.protocols.messages._
 import zio.memberlist.uuid.makeRandomUUID
 import zio.random.Random
 import zio.test._

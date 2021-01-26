@@ -2,7 +2,6 @@ package zio.memberlist
 
 import upickle.default.macroRW
 import zio.memberlist.encoding.ByteCodec
-import zio.memberlist.UnionType._
 
 sealed trait PingPong
 
@@ -24,7 +23,7 @@ object PingPong {
   }
 
   implicit val codec: ByteCodec[PingPong] =
-    ByteCodec.tagged[UNil Or PingPong][
+    ByteCodec.tagged[PingPong][
       Ping,
       Pong
     ]

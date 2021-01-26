@@ -1,66 +1,17 @@
 package zio.memberlist.protocols
 
-import upickle.default._
 import zio.clock.Clock
 import zio.duration._
 import zio.logging._
 import zio.memberlist.state.Nodes._
 import zio.memberlist.state.NodeState
 import zio.memberlist._
-import zio.memberlist.encoding.ByteCodec
+import zio.memberlist.protocols.messages.FailureDetection._
 import zio.stm.{ STM, TMap, ZSTM }
 import zio.stream.ZStream
 import zio.{ Schedule, ZIO }
 
-sealed trait FailureDetection
-
 object FailureDetection {
-
-  final case class Ping(seqNo: Long) extends FailureDetection
-
-  final case class Ack(seqNo: Long) extends FailureDetection
-
-  final case class Nack(seqNo: Long) extends FailureDetection
-
-  final case class PingReq(seqNo: Long, target: NodeAddress) extends FailureDetection
-
-  final case class Suspect(incarnation: Long, from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
-
-  final case class Alive(incarnation: Long, nodeId: NodeAddress) extends FailureDetection
-
-  final case class Dead(incarnation: Long, from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
-
-  implicit val ackCodec: ByteCodec[Ack] =
-    ByteCodec.fromReadWriter(macroRW[Ack])
-
-  implicit val nackCodec: ByteCodec[Nack] =
-    ByteCodec.fromReadWriter(macroRW[Nack])
-
-  implicit val pingCodec: ByteCodec[Ping] =
-    ByteCodec.fromReadWriter(macroRW[Ping])
-
-  implicit val pingReqCodec: ByteCodec[PingReq] =
-    ByteCodec.fromReadWriter(macroRW[PingReq])
-
-  implicit val suspectCodec: ByteCodec[Suspect] =
-    ByteCodec.fromReadWriter(macroRW[Suspect])
-
-  implicit val aliveCodec: ByteCodec[Alive] =
-    ByteCodec.fromReadWriter(macroRW[Alive])
-
-  implicit val deadCodec: ByteCodec[Dead] =
-    ByteCodec.fromReadWriter(macroRW[Dead])
-
-  //implicit val byteCodec: ByteCodec[FailureDetection] =
-  //  ByteCodec.tagged[FailureDetection][
-  //    Ack,
-  //    Ping,
-  //    PingReq,
-  //    Nack,
-  //    Suspect,
-  //    Alive,
-  //    Dead
-  //  ]
 
   type Env = LocalHealthMultiplier
     with MessageSequence
@@ -75,12 +26,12 @@ object FailureDetection {
     protocolPeriod: Duration,
     protocolTimeout: Duration,
     localNode: NodeAddress
-  ): ZIO[Env, Error, Protocol[FailureDetection]] =
+  ): ZIO[Env, Error, Protocol[messages.FailureDetection]] =
     TMap
       .empty[Long, (NodeAddress, Long)]
       .commit
       .flatMap { pingReqs =>
-        Protocol[FailureDetection].make(
+        Protocol[messages.FailureDetection].make(
           {
             case Message.BestEffort(sender, msg @ Ack(seqNo)) =>
               log.debug(s"received ack[$seqNo] from $sender") *>
@@ -209,7 +160,7 @@ object FailureDetection {
   ): ZIO[
     LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
     Error,
-    Message[FailureDetection]
+    Message[messages.FailureDetection]
   ] =
     ZIO.ifM(MessageAcknowledge.isCompleted(Ack(seqNo)).commit)(
       Message.noResponse,
@@ -243,7 +194,7 @@ object FailureDetection {
   ): ZIO[
     Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
     Error,
-    Message[FailureDetection]
+    Message[messages.FailureDetection]
   ] =
     ZIO.ifM(MessageAcknowledge.isCompleted(Ack(seqNo)).commit)(
       Message.noResponse,
@@ -253,7 +204,7 @@ object FailureDetection {
             .whenM(MessageAcknowledge.isCompleted(Nack(seqNo)).map(!_)) *>
           changeNodeState(probedNode, NodeState.Suspect) *>
           IncarnationSequence.current.flatMap(currentIncarnation =>
-            Message.withTimeout[SuspicionTimeout, FailureDetection](
+            Message.withTimeout[SuspicionTimeout, messages.FailureDetection](
               Message.Broadcast(Suspect(currentIncarnation, localNode, probedNode)),
               SuspicionTimeout
                 .registerTimeout(probedNode)

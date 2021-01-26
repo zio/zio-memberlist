@@ -1,11 +1,10 @@
 package zio.memberlist
 
-import upickle.default._
 import zio.{ Cause, Chunk, Exit, Fiber, IO, Queue, ZIO, ZManaged }
 import zio.clock.Clock
 import zio.logging.{ log, Logging }
-import zio.memberlist.MessageSink.WithPiggyback
 import zio.memberlist.encoding.ByteCodec
+import zio.memberlist.protocols.messages.WithPiggyback
 import zio.memberlist.transport.ConnectionLessTransport
 import zio.nio.core.SocketAddress
 import zio.stream.{ Take, ZStream }
@@ -47,7 +46,7 @@ class MessageSink(
       take.foldM(
         ZIO.unit,
         log.error("error: ", _),
-        ZIO.foreach_(_)(send(_).catchAll(e => log.error("error during send: " + e.getCause)))
+        ZIO.foreach_(_)(send(_).catchAll(e => log.throwable("error during send", e)))
       )
     ZStream
       .fromQueue(messages)
@@ -75,12 +74,6 @@ class MessageSink(
 
 object MessageSink {
 
-  final case class WithPiggyback(
-    node: NodeAddress,
-    message: Chunk[Byte],
-    gossip: List[Chunk[Byte]]
-  )
-
   private def recoverErrors[R, E, A](stream: ZStream[R, E, A]): ZStream[R with Logging, Nothing, Take[E, A]] =
     stream.either.mapM(
       _.fold(
@@ -88,16 +81,6 @@ object MessageSink {
         v => ZIO.succeedNow(Take.single(v))
       )
     )
-
-  implicit val codec: ByteCodec[WithPiggyback] =
-    ByteCodec.fromReadWriter(macroRW[WithPiggyback])
-
-  implicit val chunkRW: ReadWriter[Chunk[Byte]] =
-    implicitly[ReadWriter[Array[Byte]]]
-      .bimap[Chunk[Byte]](
-        ch => ch.toArray,
-        arr => Chunk.fromArray(arr)
-      )
 
   def make(
     local: NodeAddress,

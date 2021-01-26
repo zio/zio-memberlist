@@ -2,8 +2,8 @@ package zio.memberlist
 
 import zio._
 import zio.logging.{ log, Logging }
-import zio.memberlist.MessageSink.WithPiggyback
 import zio.memberlist.encoding.ByteCodec
+import zio.memberlist.protocols.messages.WithPiggyback
 import zio.memberlist.transport.{ Bind, Channel, ConnectionLessTransport }
 import zio.stream.Take
 

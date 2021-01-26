@@ -7,16 +7,11 @@ import zio.logging._
 import zio.memberlist.discovery.Discovery
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.state._
-import zio.memberlist.protocols.{ DeadLetter, FailureDetection, Initial, User }
+import zio.memberlist.protocols.{ FailureDetection, Initial, User }
 import zio.stream.{ Stream, ZStream }
 import zio.{ IO, Queue, UIO, ZLayer, ZManaged }
-import zio.memberlist.protocols.FailureDetection.PingReq
-import zio.memberlist.protocols.FailureDetection.Suspect
-import zio.memberlist.protocols.FailureDetection.Alive
-import zio.memberlist.protocols.FailureDetection.Dead
-import zio.memberlist.protocols.FailureDetection.Ping
-import zio.memberlist.protocols.FailureDetection.Ack
-import zio.memberlist.UnionType._
+import zio.memberlist.protocols.messages
+import zio.memberlist.protocols.messages.MemberlistMessage
 
 object Memberlist {
 
@@ -34,17 +29,6 @@ object Memberlist {
   final private[this] val QueueSize = 1000
 
   def live[B: ByteCodec: Tag]: ZLayer[Env, Error, Swim[B]] = {
-
-    implicit val codec: ByteCodec[FailureDetection with Initial with User[B]] =
-      ByteCodec.tagged[UNil Or FailureDetection Or Initial Or User[B]][
-        Ping,
-        PingReq,
-        Ack,
-        Suspect,
-        Alive,
-        Dead
-      ]
-
     val internalLayer =
       (ZLayer.requires[Env] ++
         MessageSequenceNo.live ++
@@ -62,16 +46,14 @@ object Memberlist {
         userIn           <- Queue.bounded[Message.BestEffort[B]](QueueSize).toManaged(_.shutdown)
         userOut          <- Queue.bounded[Message.BestEffort[B]](QueueSize).toManaged(_.shutdown)
         localNodeAddress = env.get[Nodes.Service].localNode
-        initial          <- Initial.protocol(localNodeAddress).flatMap(_.debug).toManaged_
+        initial          <- Initial.protocol(localNodeAddress).toManaged_
         failureDetection <- FailureDetection
                              .protocol(localConfig.protocolInterval, localConfig.protocolTimeout, localNodeAddress)
-                             .flatMap(_.debug)
-                             .map(_.binary)
                              .toManaged_
 
-        user         <- User.protocol[B](userIn, userOut).map(_.binary).toManaged_
-        deadLetter   <- DeadLetter.protocol.toManaged_
-        allProtocols = Protocol.compose(initial.binary, failureDetection, user, deadLetter)
+        user <- User.protocol[B](userIn, userOut).toManaged_
+//        deadLetter   <- DeadLetter.protocol.toManaged_
+        allProtocols = Protocol.compose[MemberlistMessage](initial, failureDetection, user).binary
         broadcast0   <- Broadcast.make(localConfig.messageSizeLimit, localConfig.broadcastResent).toManaged_
         messages0    <- MessageSink.make(localNodeAddress, broadcast0, udpTransport)
         _            <- messages0.process(allProtocols).toManaged_
@@ -79,7 +61,7 @@ object Memberlist {
 
         override def broadcast(data: B): IO[SerializationError, Unit] =
           for {
-            bytes <- ByteCodec.encode[User[B]](User(data))
+            bytes <- ByteCodec.encode[messages.User[B]](messages.User(data))
             _     <- broadcast0.add(Message.Broadcast(bytes))
           } yield ()
 

@@ -6,8 +6,8 @@ import zio.clock._
 import zio.console._
 import zio.logging._
 import zio.memberlist.state._
-import zio.memberlist.protocols.FailureDetection
-import zio.memberlist.protocols.FailureDetection._
+import zio.memberlist.protocols.{ messages, FailureDetection }
+import zio.memberlist.protocols.messages.FailureDetection._
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.ignore
 import zio.test.environment.TestClock
@@ -49,7 +49,7 @@ object FailureDetectionSpec extends KeeperSpec {
   val spec = suite("failure detection")(
     testM("Ping healthy Nodes periodically") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection] {
+        recorder <- ProtocolRecorder[messages.FailureDetection] {
                      case Message.BestEffort(nodeAddr, Ping(seqNo)) =>
                        Message.BestEffort(nodeAddr, Ack(seqNo))
                    }
@@ -66,7 +66,7 @@ object FailureDetectionSpec extends KeeperSpec {
     // I will ignore it for now, but it needs to be addressed in the future.
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection]()
+        recorder <- ProtocolRecorder[messages.FailureDetection]()
         _        <- Nodes.addNode(nodeAddress1).commit
         _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Alive).commit
         _        <- TestClock.adjust(1500.milliseconds)
@@ -80,7 +80,7 @@ object FailureDetectionSpec extends KeeperSpec {
     }.provideCustomLayer(testLayer) @@ ignore,
     testM("should send PingReq to other node") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection] {
+        recorder <- ProtocolRecorder[messages.FailureDetection] {
                      case Message.BestEffort(`nodeAddress2`, Ping(seqNo)) =>
                        Message.BestEffort(nodeAddress2, Ack(seqNo))
                      case Message.BestEffort(`nodeAddress1`, Ping(_)) =>
@@ -96,7 +96,7 @@ object FailureDetectionSpec extends KeeperSpec {
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
       for {
-        recorder <- ProtocolRecorder[FailureDetection] {
+        recorder <- ProtocolRecorder[messages.FailureDetection] {
                      case Message.BestEffort(`nodeAddress2`, Ping(seqNo)) =>
                        Message.BestEffort(nodeAddress2, Ack(seqNo))
                      case Message.BestEffort(`nodeAddress1`, Ping(_)) =>

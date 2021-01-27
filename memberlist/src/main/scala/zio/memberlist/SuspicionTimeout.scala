@@ -17,18 +17,18 @@ import zio.memberlist.protocols.messages.FailureDetection
 object SuspicionTimeout {
 
   trait Service {
-    def registerTimeout[A](node: NodeAddress): STM[SuspicionTimeoutAlreadyStarted, Timeout]
-    def cancelTimeout(node: NodeAddress): USTM[Unit]
-    def incomingSuspect(node: NodeAddress, from: NodeAddress): USTM[Unit]
+    def registerTimeout[A](node: NodeName): STM[SuspicionTimeoutAlreadyStarted, Timeout]
+    def cancelTimeout(node: NodeName): USTM[Unit]
+    def incomingSuspect(node: NodeName, from: NodeName): USTM[Unit]
   }
 
-  def registerTimeout[A](node: NodeAddress): ZSTM[SuspicionTimeout, SuspicionTimeoutAlreadyStarted, Timeout] =
+  def registerTimeout[A](node: NodeName): ZSTM[SuspicionTimeout, SuspicionTimeoutAlreadyStarted, Timeout] =
     ZSTM.accessM[SuspicionTimeout](_.get.registerTimeout(node))
 
-  def incomingSuspect(node: NodeAddress, from: NodeAddress): URSTM[SuspicionTimeout, Unit] =
+  def incomingSuspect(node: NodeName, from: NodeName): URSTM[SuspicionTimeout, Unit] =
     ZSTM.accessM[SuspicionTimeout](_.get.incomingSuspect(node, from))
 
-  def cancelTimeout(node: NodeAddress): URSTM[SuspicionTimeout, Unit] =
+  def cancelTimeout(node: NodeName): URSTM[SuspicionTimeout, Unit] =
     ZSTM.accessM[SuspicionTimeout](_.get.cancelTimeout(node))
 
   private case class SuspicionTimeoutEntry(
@@ -36,16 +36,16 @@ object SuspicionTimeout {
   )
 
   final class Timeout(
-    val node: NodeAddress,
+    val node: NodeName,
     min: Duration,
     max: Duration,
     start: TRef[Option[Long]],
     end: TRef[Option[Long]],
-    confirmations: TSet[NodeAddress],
+    confirmations: TSet[NodeName],
     commands: TQueue[TimeoutCmd],
     promise: TPromise[Error, Message[FailureDetection]],
     suspicionRequiredConfirmations: Int,
-    store: TMap[NodeAddress, SuspicionTimeoutEntry],
+    store: TMap[NodeName, SuspicionTimeoutEntry],
     env: Clock with Nodes with Logging with IncarnationSequence
   ) {
 
@@ -58,7 +58,7 @@ object SuspicionTimeout {
       ZSTM
         .ifM(nodeState(node).map(_ == NodeState.Suspect).orElseSucceed(false))(
           changeNodeState(node, NodeState.Dead) *>
-            currentIncarnation.map(incarnation => Message.Broadcast(Dead(incarnation, nodes.localNode, node))),
+            currentIncarnation.map(incarnation => Message.Broadcast(Dead(incarnation, nodes.localNodeName, node))),
           ZSTM.succeed(Message.NoResponse)
         )
         .provide(env)
@@ -109,8 +109,8 @@ object SuspicionTimeout {
 
   sealed trait TimeoutCmd
   object TimeoutCmd {
-    case class NewConfirmation(node: NodeAddress) extends TimeoutCmd
-    case object Cancel                            extends TimeoutCmd
+    case class NewConfirmation(node: NodeName) extends TimeoutCmd
+    case object Cancel                         extends TimeoutCmd
   }
 
   private def live0(
@@ -120,7 +120,7 @@ object SuspicionTimeout {
     suspicionRequiredConfirmations: Int
   ): ZIO[Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout.Service] =
     TMap
-      .empty[NodeAddress, SuspicionTimeoutEntry]
+      .empty[NodeName, SuspicionTimeoutEntry]
       .commit
       .zip(
         TQueue
@@ -143,7 +143,7 @@ object SuspicionTimeout {
 
           new Service {
 
-            override def cancelTimeout(node: NodeAddress): USTM[Unit] =
+            override def cancelTimeout(node: NodeName): USTM[Unit] =
               store
                 .get(node)
                 .flatMap[Any, Nothing, Unit] {
@@ -153,7 +153,7 @@ object SuspicionTimeout {
                 }
                 .unit
 
-            override def registerTimeout[A](node: NodeAddress): STM[SuspicionTimeoutAlreadyStarted, Timeout] =
+            override def registerTimeout[A](node: NodeName): STM[SuspicionTimeoutAlreadyStarted, Timeout] =
               for {
                 _             <- STM.fail(SuspicionTimeoutAlreadyStarted(node)).whenM(store.contains(node))
                 queue         <- TQueue.bounded[TimeoutCmd](1)
@@ -165,7 +165,7 @@ object SuspicionTimeout {
                 _             <- store.put(node, entry)
                 startTimeTRef <- TRef.make[Option[Long]](None)
                 endTimeTRef   <- TRef.make[Option[Long]](None)
-                confirmations <- TSet.make[NodeAddress]()
+                confirmations <- TSet.make[NodeName]()
                 onComplete    <- TPromise.make[Error, Message[FailureDetection]]
                 timeout = new Timeout(
                   node = node,
@@ -183,7 +183,7 @@ object SuspicionTimeout {
                 _ <- startTimeout.offer(timeout)
               } yield timeout
 
-            override def incomingSuspect(node: NodeAddress, from: NodeAddress): USTM[Unit] =
+            override def incomingSuspect(node: NodeName, from: NodeName): USTM[Unit] =
               store
                 .get(node)
                 .flatMap {

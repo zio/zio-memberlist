@@ -18,12 +18,13 @@ object MessagesSpec extends KeeperSpec {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
     broadcast <- Broadcast.make(64000, 2).toManaged_
-    messages  <- MessageSink.make(local, broadcast, transport)
+    messages  <- MessageSink.make(NodeName("test-node"), local, broadcast, transport)
   } yield (transport, messages)
+
+  val testNode = Node(NodeName("node-1"), NodeAddress(Array(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
 
   val spec = suite("messages")(
     testM("receiveMessage") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {
@@ -39,11 +40,12 @@ object MessagesSpec extends KeeperSpec {
         case (testTransport, messages) =>
           for {
             dl    <- protocol
+            _     <- Nodes.addNode(testNode).commit
             _     <- messages.process(dl.binary)
             ping1 <- ByteCodec[PingPong].toChunk(PingPong.Ping(123))
             ping2 <- ByteCodec[PingPong].toChunk(PingPong.Ping(321))
-            _     <- testTransport.incommingMessage(WithPiggyback(testNodeAddress, ping1, List.empty))
-            _     <- testTransport.incommingMessage(WithPiggyback(testNodeAddress, ping2, List.empty))
+            _     <- testTransport.incommingMessage(WithPiggyback(testNode.name, ping1, List.empty))
+            _     <- testTransport.incommingMessage(WithPiggyback(testNode.name, ping2, List.empty))
             messages <- testTransport.outgoingMessages.mapM {
                          case WithPiggyback(_, chunk, _) =>
                            ByteCodec.decode[PingPong](chunk)
@@ -52,7 +54,6 @@ object MessagesSpec extends KeeperSpec {
       }
     },
     testM("should not exceed size of message") {
-      val testNodeAddress = NodeAddress(Array(1, 2, 3, 4), 1111)
 
       val protocol = Protocol[PingPong].make(
         {
@@ -74,18 +75,19 @@ object MessagesSpec extends KeeperSpec {
         case (testTransport, messages) =>
           for {
             dl    <- protocol
+            _     <- Nodes.addNode(testNode).commit
             _     <- messages.process(dl.binary)
             ping1 <- ByteCodec[PingPong].toChunk(PingPong.Ping(123))
-            _     <- testTransport.incommingMessage(WithPiggyback(testNodeAddress, ping1, List.empty))
+            _     <- testTransport.incommingMessage(WithPiggyback(testNode.name, ping1, List.empty))
             m     <- testTransport.outgoingMessages.runHead
             bytes <- m.fold[IO[SerializationError.SerializationTypeError, Chunk[Byte]]](ZIO.succeedNow(Chunk.empty))(
                       ByteCodec[WithPiggyback].toChunk(_)
                     )
-          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1487))) && assert(bytes.size)(equalTo(62593))
+          } yield assert(m.map(_.gossip.size))(isSome(equalTo(1487))) && assert(bytes.size)(equalTo(62591))
       }
     }
   ).provideCustomLayer(
     logger ++ IncarnationSequence.live ++ ((ZLayer.requires[Clock] ++ logger) >>> Nodes
-      .live(NodeAddress(Array(0, 0, 0, 0), 1111)))
+      .live(NodeName("local-node")))
   )
 }

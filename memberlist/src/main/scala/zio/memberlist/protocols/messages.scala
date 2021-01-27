@@ -5,6 +5,7 @@ import zio.Chunk
 import zio.memberlist.NodeAddress
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.protocols.messages.FailureDetection.{ Ack, Alive, Dead, Ping, PingReq, Suspect }
+import zio.memberlist.state.NodeName
 
 object messages {
 
@@ -33,13 +34,13 @@ object messages {
 
     final case class Nack(seqNo: Long) extends FailureDetection
 
-    final case class PingReq(seqNo: Long, target: NodeAddress) extends FailureDetection
+    final case class PingReq(seqNo: Long, target: NodeName) extends FailureDetection
 
-    final case class Suspect(incarnation: Long, from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
+    final case class Suspect(incarnation: Long, from: NodeName, node: NodeName) extends FailureDetection
 
-    final case class Alive(incarnation: Long, nodeId: NodeAddress) extends FailureDetection
+    final case class Alive(incarnation: Long, nodeId: NodeName) extends FailureDetection
 
-    final case class Dead(incarnation: Long, from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
+    final case class Dead(incarnation: Long, from: NodeName, nodeId: NodeName) extends FailureDetection
 
     implicit val ackCodec: ByteCodec[Ack] =
       ByteCodec.fromReadWriter(macroRW[Ack])
@@ -63,6 +64,8 @@ object messages {
       ByteCodec.fromReadWriter(macroRW[Dead])
 
   }
+
+  case class PushPull()
 
   sealed trait Initial extends MemberlistMessage
 
@@ -92,7 +95,7 @@ object messages {
   }
 
   final case class WithPiggyback(
-    node: NodeAddress,
+    node: NodeName,
     message: Chunk[Byte],
     gossip: List[Chunk[Byte]]
   ) extends MemberlistMessage

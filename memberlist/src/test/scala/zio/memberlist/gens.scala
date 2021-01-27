@@ -1,9 +1,9 @@
 package zio.memberlist
 
 import java.util.UUID
-
 import zio.memberlist.protocols.messages.FailureDetection._
 import zio.memberlist.protocols.messages._
+import zio.memberlist.state.NodeName
 import zio.memberlist.uuid.makeRandomUUID
 import zio.random.Random
 import zio.test._
@@ -12,6 +12,9 @@ object gens {
 
   val nodeAddress: Gen[Random with Sized, NodeAddress] =
     Gen.listOf(Gen.anyByte).map(_.toArray).zipWith(Gen.anyInt)(NodeAddress.apply)
+
+  val nodeName: Gen[Random with Sized, NodeName] =
+    Gen.alphaNumericString.map(NodeName.apply)
 
   val uuid: Gen[Any, UUID] =
     Gen.fromEffect(makeRandomUUID)
@@ -34,27 +37,27 @@ object gens {
   val pingReq: Gen[Random with Sized, PingReq] =
     for {
       seqNo <- Gen.anyLong
-      to    <- nodeAddress
+      to    <- nodeName
     } yield PingReq(seqNo, to)
 
   val suspect: Gen[Random with Sized, Suspect] =
     for {
       incarnation <- Gen.anyLong
-      from        <- nodeAddress
-      to          <- nodeAddress
+      from        <- nodeName
+      to          <- nodeName
     } yield Suspect(incarnation, from, to)
 
   val alive: Gen[Random with Sized, Alive] =
     for {
       incarnation <- Gen.anyLong
-      from        <- nodeAddress
+      from        <- nodeName
     } yield Alive(incarnation, from)
 
   val dead: Gen[Random with Sized, Dead] =
     for {
       incarnation <- Gen.anyLong
-      from        <- nodeAddress
-      to          <- nodeAddress
+      from        <- nodeName
+      to          <- nodeName
     } yield Dead(incarnation, from, to)
 
   val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =

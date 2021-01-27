@@ -2,6 +2,7 @@ package zio.memberlist
 
 import zio.duration.Duration
 import zio.memberlist.Message._
+import zio.memberlist.state.NodeName
 import zio.stm.ZSTM
 import zio.{ IO, UIO, ZIO }
 
@@ -31,7 +32,7 @@ sealed trait Message[+A] {
 
 object Message {
 
-  final case class BestEffort[A](node: NodeAddress, message: A) extends Message[A]
+  final case class BestEffort[A](node: NodeName, message: A) extends Message[A]
 
   final case class Batch[A](first: Message[A], second: Message[A], rest: Message[A]*) extends Message[A]
 

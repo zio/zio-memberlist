@@ -4,8 +4,10 @@ import zio.Layer
 import zio.config.ConfigDescriptor._
 import zio.config.{ ConfigDescriptor, ReadError, ZConfig }
 import zio.duration.{ Duration, _ }
+import zio.memberlist.state.NodeName
 
 case class MemberlistConfig(
+  name: NodeName,
   port: Int,
   protocolInterval: Duration,
   protocolTimeout: Duration,
@@ -20,7 +22,8 @@ case class MemberlistConfig(
 object MemberlistConfig {
 
   val description: ConfigDescriptor[MemberlistConfig] =
-    (int("PORT").default(5557) |@|
+    (string("NAME").xmap[NodeName](NodeName(_), _.name) |@|
+      int("PORT").default(5557) |@|
       zioDuration("PROTOCOL_INTERVAL").default(1.second) |@|
       zioDuration("PROTOCOL_TIMEOUT").default(500.milliseconds) |@|
       int("MESSAGE_SIZE_LIMIT").default(64000) |@|

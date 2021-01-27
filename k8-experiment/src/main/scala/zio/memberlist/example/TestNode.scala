@@ -11,7 +11,6 @@ import zio.memberlist._
 import zio.nio.core.InetAddress
 import zio.{ ExitCode, ZIO, ZLayer }
 import zio.duration._
-import zio.memberlist.UnionType._
 
 object TestNode extends zio.App {
 
@@ -24,7 +23,7 @@ object TestNode extends zio.App {
       ByteCodec.fromReadWriter(macroRW[SimulateCpuSpike.type])
 
     implicit val codec: ByteCodec[ChaosMonkey] =
-      ByteCodec.tagged[UNil Or ChaosMonkey][
+      ByteCodec.tagged[ChaosMonkey][
         SimulateCpuSpike.type
       ]
   }

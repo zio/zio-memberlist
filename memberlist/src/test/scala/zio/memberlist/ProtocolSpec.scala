@@ -3,6 +3,7 @@ package zio.memberlist
 import zio.ZIO
 import zio.memberlist.PingPong._
 import zio.memberlist.encoding.ByteCodec
+import zio.memberlist.state.NodeName
 import zio.stream.ZStream
 import zio.test.Assertion.equalTo
 import zio.test.{ assert, suite, testM }
@@ -18,7 +19,7 @@ object ProtocolSpec extends KeeperSpec {
     ZStream.empty
   )
 
-  val testNode = NodeAddress(Array(1, 2, 3, 4), 123)
+  val testNode = NodeName("test-node")
 
   val spec = suite("protocol spec")(
     testM("request response") {

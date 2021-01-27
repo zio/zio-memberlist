@@ -4,7 +4,7 @@ import zio.clock.Clock
 import zio.duration._
 import zio.logging._
 import zio.memberlist.state.Nodes._
-import zio.memberlist.state.NodeState
+import zio.memberlist.state.{ NodeName, NodeState }
 import zio.memberlist._
 import zio.memberlist.protocols.messages.FailureDetection._
 import zio.stm.{ STM, TMap, ZSTM }
@@ -25,10 +25,10 @@ object FailureDetection {
   def protocol(
     protocolPeriod: Duration,
     protocolTimeout: Duration,
-    localNode: NodeAddress
+    localNode: NodeName
   ): ZIO[Env, Error, Protocol[messages.FailureDetection]] =
     TMap
-      .empty[Long, (NodeAddress, Long)]
+      .empty[Long, (NodeName, Long)]
       .commit
       .flatMap { pingReqs =>
         Protocol[messages.FailureDetection].make(
@@ -82,15 +82,19 @@ object FailureDetection {
                 } <* LocalHealthMultiplier.increase
               )
 
-            case Message.BestEffort(from, Suspect(_, _, node)) =>
-              nodeState(node)
-                .orElseSucceed(NodeState.Dead)
+            case Message.BestEffort(from, Suspect(incarnation, _, node)) =>
+              IncarnationSequence.current
+                .zip(
+                  nodeState(node).orElseSucceed(NodeState.Dead)
+                )
                 .flatMap {
-                  case NodeState.Suspect =>
-                    SuspicionTimeout.incomingSuspect(node, from)
-                  case NodeState.Dead =>
+                  case (localIncarnation, _) if localIncarnation > incarnation =>
                     STM.unit
-                  case _ =>
+                  case (_, NodeState.Dead) =>
+                    STM.unit
+                  case (_, NodeState.Suspect) =>
+                    SuspicionTimeout.incomingSuspect(node, from)
+                  case (_, _) =>
                     changeNodeState(node, NodeState.Suspect).ignore
                 }
                 .commit *> Message.noResponse
@@ -125,22 +129,22 @@ object FailureDetection {
               Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod).commit)
             )
             .collectM {
-              case (Some((probedNode, state)), seqNo) =>
+              case (Some((probedNodeName, probeNode)), seqNo) =>
                 ZSTM.atomically(
                   MessageAcknowledge.register(Ack(seqNo)) *>
                     IncarnationSequence.current.flatMap(incarnation =>
                       Message.withScaledTimeout(
-                        if (state != NodeState.Alive)
+                        if (probeNode.state != NodeState.Alive)
                           Message.Batch(
-                            Message.BestEffort(probedNode, Ping(seqNo)),
+                            Message.BestEffort(probedNodeName, Ping(seqNo)),
                             //this is part of buddy system
-                            Message.BestEffort(probedNode, Suspect(incarnation, localNode, probedNode))
+                            Message.BestEffort(probedNodeName, Suspect(incarnation, localNode, probedNodeName))
                           )
                         else
-                          Message.BestEffort(probedNode, Ping(seqNo)),
+                          Message.BestEffort(probedNodeName, Ping(seqNo)),
                         pingTimeoutAction(
                           seqNo,
-                          probedNode,
+                          probedNodeName,
                           localNode,
                           protocolTimeout
                         ),
@@ -154,8 +158,8 @@ object FailureDetection {
 
   private def pingTimeoutAction(
     seqNo: Long,
-    probedNode: NodeAddress,
-    localNode: NodeAddress,
+    probedNode: NodeName,
+    localNode: NodeName,
     protocolTimeout: Duration
   ): ZIO[
     LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
@@ -189,8 +193,8 @@ object FailureDetection {
 
   private def pingReqTimeoutAction(
     seqNo: Long,
-    probedNode: NodeAddress,
-    localNode: NodeAddress
+    probedNode: NodeName,
+    localNode: NodeName
   ): ZIO[
     Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
     Error,
@@ -216,5 +220,4 @@ object FailureDetection {
           )
       )
     )
-
 }

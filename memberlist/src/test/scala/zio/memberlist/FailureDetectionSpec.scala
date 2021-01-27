@@ -29,22 +29,22 @@ object FailureDetectionSpec extends KeeperSpec {
       MessageAcknowledge.live ++
       LocalHealthMultiplier.live(9)
   ) >+> zio.memberlist.state.Nodes
-    .live(NodeAddress(Array(0, 0, 0, 0), 1111)) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
+    .live(NodeName("test-node")) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
 
   val recorder =
     ProtocolRecorder
       .make(
         FailureDetection
-          .protocol(protocolPeriod, protocolTimeout, NodeAddress(Array[Byte](1, 1, 1, 1), 1111))
+          .protocol(protocolPeriod, protocolTimeout, NodeName("test-node"))
           .flatMap(_.debug)
       )
       .orDie
 
   val testLayer = nodesLayer >+> recorder
 
-  val nodeAddress1 = NodeAddress(Array(1, 2, 3, 4), 1111)
-  val nodeAddress2 = NodeAddress(Array(11, 22, 33, 44), 1111)
-  val nodeAddress3 = NodeAddress(Array(2, 3, 4, 5), 1111)
+  val node1 = Node(NodeName("node-1"), NodeAddress(Array(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
+  val node2 = Node(NodeName("node-2"), NodeAddress(Array(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
+  val node3 = Node(NodeName("node-3"), NodeAddress(Array(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
 
   val spec = suite("failure detection")(
     testM("Ping healthy Nodes periodically") {
@@ -53,13 +53,11 @@ object FailureDetectionSpec extends KeeperSpec {
                      case Message.BestEffort(nodeAddr, Ping(seqNo)) =>
                        Message.BestEffort(nodeAddr, Ack(seqNo))
                    }
-        _        <- Nodes.addNode(nodeAddress1).commit
-        _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Alive).commit
-        _        <- Nodes.addNode(nodeAddress2).commit
-        _        <- Nodes.changeNodeState(nodeAddress2, NodeState.Alive).commit
+        _        <- Nodes.addNode(node1).commit
+        _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(100.seconds)
         messages <- recorder.collectN(3) { case Message.BestEffort(addr, _: Ping) => addr }
-      } yield assert(messages.toSet)(equalTo(Set(nodeAddress2, nodeAddress1)))
+      } yield assert(messages.toSet)(equalTo(Set(node1.name, node2.name)))
     }.provideCustomLayer(testLayer),
     // The test is passing locally, but for some reasons in CircleCI it always
     // times out for 2.12 at JDK8, while the other versions eventually pass;
@@ -67,47 +65,42 @@ object FailureDetectionSpec extends KeeperSpec {
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
         recorder <- ProtocolRecorder[messages.FailureDetection]()
-        _        <- Nodes.addNode(nodeAddress1).commit
-        _        <- Nodes.changeNodeState(nodeAddress1, NodeState.Alive).commit
+        _        <- Nodes.addNode(node1).commit
         _        <- TestClock.adjust(1500.milliseconds)
         messages <- recorder.collectN(2) { case msg => msg }
         nodeState <- Nodes
-                      .nodeState(nodeAddress1)
+                      .nodeState(node1.name)
                       .orElseSucceed(NodeState.Dead)
                       .commit // in case it was cleaned up already
-      } yield assert(messages)(equalTo(List(Message.BestEffort(nodeAddress1, Ping(1)), Message.NoResponse))) &&
+      } yield assert(messages)(equalTo(List(Message.BestEffort(node1.name, Ping(1)), Message.NoResponse))) &&
         assert(nodeState)(equalTo(NodeState.Dead))
     }.provideCustomLayer(testLayer) @@ ignore,
     testM("should send PingReq to other node") {
       for {
         recorder <- ProtocolRecorder[messages.FailureDetection] {
-                     case Message.BestEffort(`nodeAddress2`, Ping(seqNo)) =>
-                       Message.BestEffort(nodeAddress2, Ack(seqNo))
-                     case Message.BestEffort(`nodeAddress1`, Ping(_)) =>
+                     case Message.BestEffort(name, Ping(seqNo)) if name == node2.name =>
+                       Message.BestEffort(node2.name, Ack(seqNo))
+                     case Message.BestEffort(name, Ping(_)) if name == node1.name =>
                        Message.NoResponse //simulate failing node
                    }
-        _   <- Nodes.addNode(nodeAddress1).commit
-        _   <- Nodes.changeNodeState(nodeAddress1, NodeState.Alive).commit
-        _   <- Nodes.addNode(nodeAddress2).commit
-        _   <- Nodes.changeNodeState(nodeAddress2, NodeState.Alive).commit
+        _   <- Nodes.addNode(node1).commit
+        _   <- Nodes.addNode(node2).commit
         _   <- TestClock.adjust(10.seconds)
         msg <- recorder.collectN(1) { case Message.BestEffort(_, msg: PingReq) => msg }
-      } yield assert(msg)(equalTo(List(PingReq(2, nodeAddress1))))
+      } yield assert(msg)(equalTo(List(PingReq(1, node1.name))))
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
       for {
         recorder <- ProtocolRecorder[messages.FailureDetection] {
-                     case Message.BestEffort(`nodeAddress2`, Ping(seqNo)) =>
-                       Message.BestEffort(nodeAddress2, Ack(seqNo))
-                     case Message.BestEffort(`nodeAddress1`, Ping(_)) =>
+                     case Message.BestEffort(name, Ping(seqNo)) if name == node2.name =>
+                       Message.BestEffort(node2.name, Ack(seqNo))
+                     case Message.BestEffort(name, Ping(_)) if name == node1.name =>
                        Message.NoResponse //simulate failing node
-                     case Message.BestEffort(`nodeAddress2`, PingReq(seqNo, _)) =>
-                       Message.BestEffort(nodeAddress2, Ack(seqNo))
+                     case Message.BestEffort(name, PingReq(seqNo, _)) if name == node2.name =>
+                       Message.BestEffort(node2.name, Ack(seqNo))
                    }
-        _ <- Nodes.addNode(nodeAddress1).commit
-        _ <- Nodes.changeNodeState(nodeAddress1, NodeState.Alive).commit
-        _ <- Nodes.addNode(nodeAddress2).commit
-        _ <- Nodes.changeNodeState(nodeAddress2, NodeState.Alive).commit
+        _ <- Nodes.addNode(node1).commit
+        _ <- Nodes.addNode(node2).commit
         _ <- TestClock.adjust(10.seconds)
         _ <- recorder.collectN(1) { case Message.BestEffort(_, msg: PingReq) => msg }
 //        event <- internalEvents.collect {

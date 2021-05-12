@@ -14,7 +14,7 @@ object ByteCodecLaws {
       implicit
       codec: ByteCodec[A],
       tag: TypeTag[A]
-    ): Spec[R, TestFailure[Nothing], TestSuccess] =
+    ): Spec[TestConfig with R, TestFailure[Nothing], TestSuccess] =
       suite(s"ByteCodecLaws[${typeOf[A].typeSymbol.name.toString}]")(
         testM("codec round trip") {
           checkM(gen) { a =>

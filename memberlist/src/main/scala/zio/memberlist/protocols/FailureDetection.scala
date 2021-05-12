@@ -1,239 +1,21 @@
 package zio.memberlist.protocols
 
-import upickle.default._
 import zio.clock.Clock
 import zio.duration._
-import zio.memberlist.Nodes._
-import zio.memberlist._
 import zio.logging._
-import zio.memberlist.encoding.ByteCodec
-import zio.stm.{ STM, TMap, TSet }
+import zio.memberlist.state.Nodes._
+import zio.memberlist.state.{ NodeName, NodeState }
+import zio.memberlist._
+import zio.memberlist.protocols.messages.FailureDetection._
+import zio.stm.{ STM, TMap, ZSTM }
 import zio.stream.ZStream
 import zio.{ Schedule, ZIO }
 
-sealed trait FailureDetection
-
 object FailureDetection {
 
-  case object Ping                                                 extends FailureDetection
-  case object Ack                                                  extends FailureDetection
-  case object Nack                                                 extends FailureDetection
-  final case class PingReq(target: NodeAddress)                    extends FailureDetection
-  final case class Suspect(from: NodeAddress, nodeId: NodeAddress) extends FailureDetection
-  final case class Alive(nodeId: NodeAddress)                      extends FailureDetection
-  final case class Dead(nodeId: NodeAddress)                       extends FailureDetection
-
-  implicit val ackCodec: ByteCodec[Ack.type] =
-    ByteCodec.fromReadWriter(macroRW[Ack.type])
-
-  implicit val nackCodec: ByteCodec[Nack.type] =
-    ByteCodec.fromReadWriter(macroRW[Nack.type])
-
-  implicit val pingCodec: ByteCodec[Ping.type] =
-    ByteCodec.fromReadWriter(macroRW[Ping.type])
-
-  implicit val pingReqCodec: ByteCodec[PingReq] =
-    ByteCodec.fromReadWriter(macroRW[PingReq])
-
-  implicit val suspectCodec: ByteCodec[Suspect] =
-    ByteCodec.fromReadWriter(macroRW[Suspect])
-
-  implicit val aliveCodec: ByteCodec[Alive] =
-    ByteCodec.fromReadWriter(macroRW[Alive])
-
-  implicit val deadCodec: ByteCodec[Dead] =
-    ByteCodec.fromReadWriter(macroRW[Dead])
-
-  implicit val byteCodec: ByteCodec[FailureDetection] =
-    ByteCodec.tagged[FailureDetection][
-      Ack.type,
-      Ping.type,
-      PingReq,
-      Nack.type,
-      Suspect,
-      Alive,
-      Dead
-    ]
-
-  private class ProtocolFactory(
-    pingReqs: TMap[Long, (NodeAddress, Long)],
-    pendingNacks: TSet[Long],
-    protocolPeriod: Duration,
-    protocolTimeout: Duration,
-    localNode: NodeAddress
-  ) {
-
-    val make = Protocol[FailureDetection].make(
-      {
-        case Message.Direct(sender, conversationId, Ack) =>
-          log.debug(s"received ack[$conversationId] from $sender") *>
-            MessageAcknowledge.ack(conversationId) *>
-            pingReqs.get(conversationId).commit.map {
-              case Some((originalNode, originalConversation)) =>
-                Message.Direct(originalNode, originalConversation, Ack)
-              case None =>
-                Message.NoResponse
-            } <* LocalHealthMultiplier.decrease
-
-        case Message.Direct(sender, conversationId, Ping) =>
-          ZIO.succeedNow(Message.Direct(sender, conversationId, Ack))
-
-        case Message.Direct(sender, originalAck, PingReq(to)) =>
-          Message
-            .direct(to, Ping)
-            .flatMap(ping =>
-              pingReqs.put(ping.conversationId, (sender, originalAck)).commit *>
-                Message.withTimeout(
-                  message = ping,
-                  action = pingReqs
-                    .get(ping.conversationId)
-                    .flatMap {
-                      case Some((sender, originalAck)) =>
-                        pingReqs
-                          .delete(ping.conversationId)
-                          .as(Message.Direct(sender, originalAck, Nack))
-                      case _ =>
-                        STM.succeedNow(Message.NoResponse)
-                    }
-                    .commit,
-                  timeout = protocolTimeout
-                )
-            )
-        case Message.Direct(_, conversationId, Nack) =>
-          pendingNacks.delete(conversationId).commit *>
-            Message.noResponse
-
-        case Message.Direct(sender, _, Suspect(_, `localNode`)) =>
-          Message
-            .direct(sender, Alive(localNode))
-            .map(
-              Message.Batch(
-                _,
-                Message.Broadcast(Alive(localNode))
-              )
-            ) <* LocalHealthMultiplier.increase
-
-        case Message.Direct(from, _, Suspect(_, node)) =>
-          nodeState(node)
-            .orElseSucceed(NodeState.Dead)
-            .flatMap {
-              case NodeState.Dead | NodeState.Suspicion =>
-                SuspicionTimeout.incomingSuspect(node, from) *>
-                  Message.noResponse
-              case _ =>
-                changeNodeState(node, NodeState.Suspicion).ignore *>
-                  Message.noResponse
-            }
-
-        case Message.Direct(sender, _, msg @ Dead(nodeAddress)) if sender == nodeAddress =>
-          changeNodeState(nodeAddress, NodeState.Left).ignore
-            .as(Message.Broadcast(msg))
-
-        case Message.Direct(_, _, msg @ Dead(nodeAddress)) =>
-          nodeState(nodeAddress).orElseSucceed(NodeState.Dead).flatMap {
-            case NodeState.Dead => Message.noResponse
-            case _ =>
-              changeNodeState(nodeAddress, NodeState.Dead).ignore
-                .as(Message.Broadcast(msg))
-          }
-
-        case Message.Direct(_, _, msg @ Alive(nodeAddress)) =>
-          SuspicionTimeout.cancelTimeout(nodeAddress) *>
-            changeNodeState(nodeAddress, NodeState.Healthy).ignore
-              .as(Message.Broadcast(msg))
-      },
-      ZStream
-        .repeatEffectWith(
-          nextNode().zip(ConversationId.next),
-          Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod))
-        )
-        .collectM {
-          case (Some((probedNode, state)), conversationId) =>
-            MessageAcknowledge.register(conversationId) *>
-              Message.withScaledTimeout(
-                if (state != NodeState.Healthy)
-                  Message.Batch(
-                    Message.Direct(probedNode, conversationId, Ping),
-                    //this is part of buddy system
-                    Message.Direct(probedNode, conversationId, Suspect(localNode, probedNode))
-                  )
-                else
-                  Message.Direct(probedNode, conversationId, Ping),
-                pingTimeoutAction(
-                  conversationId,
-                  probedNode
-                ),
-                protocolTimeout
-              )
-
-        }
-    )
-
-    private def pingTimeoutAction(
-      conversationId: Long,
-      probedNode: NodeAddress
-    ): ZIO[
-      LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout,
-      Error,
-      Message[
-        FailureDetection
-      ]
-    ] =
-      ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
-        Message.noResponse,
-        log.warn(s"node: $probedNode missed ack with id ${conversationId}") *>
-          LocalHealthMultiplier.increase *>
-          nextNode(Some(probedNode)).flatMap {
-            case Some((next, _)) =>
-              pendingNacks.put(conversationId).commit *>
-                Message.withScaledTimeout(
-                  Message.Direct(next, conversationId, PingReq(probedNode)),
-                  pingReqTimeoutAction(
-                    conversationId,
-                    probedNode
-                  ),
-                  protocolTimeout
-                )
-
-            case None =>
-              // we don't know any other node to ask
-              changeNodeState(probedNode, NodeState.Dead) *>
-                Message.noResponse
-          }
-      )
-
-    private def pingReqTimeoutAction(
-      conversationId: Long,
-      probedNode: NodeAddress
-    ): ZIO[Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout, Error, Message[
-      FailureDetection
-    ]] =
-      ZIO.ifM(MessageAcknowledge.isCompleted(conversationId))(
-        Message.noResponse,
-        MessageAcknowledge.ack(conversationId) *> (LocalHealthMultiplier.increase *>
-          pendingNacks
-            .delete(conversationId)
-            .commit)
-          .whenM(pendingNacks.contains(conversationId).commit) *>
-          changeNodeState(probedNode, NodeState.Suspicion) *>
-          Message.withTimeout(
-            Message.Broadcast(Suspect(localNode, probedNode)),
-            SuspicionTimeout
-              .registerTimeout(probedNode) {
-                ZIO.ifM(nodeState(probedNode).map(_ == NodeState.Suspicion).orElseSucceed(false))(
-                  changeNodeState(probedNode, NodeState.Dead)
-                    .as(Message.Broadcast(Dead(probedNode))),
-                  Message.noResponse
-                )
-              }
-              .orElse(Message.noResponse),
-            Duration.Zero
-          )
-      )
-  }
-
   type Env = LocalHealthMultiplier
-    with ConversationId
+    with MessageSequence
+    with IncarnationSequence
     with Nodes
     with Logging
     with MessageAcknowledge
@@ -243,15 +25,199 @@ object FailureDetection {
   def protocol(
     protocolPeriod: Duration,
     protocolTimeout: Duration,
-    localNode: NodeAddress
-  ): ZIO[Env, Error, Protocol[FailureDetection]] =
+    localNode: NodeName
+  ): ZIO[Env, Error, Protocol[messages.FailureDetection]] =
     TMap
-      .empty[Long, (NodeAddress, Long)]
-      .zip(TSet.empty[Long])
+      .empty[Long, (NodeName, Long)]
       .commit
-      .flatMap {
-        case (pendingAcks, pendingNacks) =>
-          new ProtocolFactory(pendingAcks, pendingNacks, protocolPeriod, protocolTimeout, localNode).make
+      .flatMap { pingReqs =>
+        Protocol[messages.FailureDetection].make(
+          {
+            case Message.BestEffort(sender, msg @ Ack(seqNo)) =>
+              log.debug(s"received ack[$seqNo] from $sender") *>
+                ZSTM.atomically(
+                  MessageAcknowledge.ack(msg) *>
+                    pingReqs.get(seqNo).map {
+                      case Some((originalNode, originalSeqNo)) =>
+                        Message.BestEffort(originalNode, Ack(originalSeqNo))
+                      case None =>
+                        Message.NoResponse
+                    } <* LocalHealthMultiplier.decrease
+                )
+
+            case Message.BestEffort(sender, Ping(seqNo)) =>
+              ZIO.succeedNow(Message.BestEffort(sender, Ack(seqNo)))
+
+            case Message.BestEffort(sender, PingReq(originalSeqNo, to)) =>
+              MessageSequenceNo.next
+                .map(newSeqNo => Ping(newSeqNo))
+                .flatMap(ping =>
+                  pingReqs.put(ping.seqNo, (sender, originalSeqNo)) *>
+                    Message.withTimeout(
+                      message = Message.BestEffort(to, ping),
+                      action = pingReqs
+                        .get(ping.seqNo)
+                        .flatMap {
+                          case Some((sender, originalSeqNo)) =>
+                            pingReqs
+                              .delete(ping.seqNo)
+                              .as(Message.BestEffort(sender, Nack(originalSeqNo)))
+                          case _ =>
+                            STM.succeedNow(Message.NoResponse)
+                        }
+                        .commit,
+                      timeout = protocolTimeout
+                    )
+                )
+                .commit
+            case Message.BestEffort(_, msg @ Nack(_)) =>
+              MessageAcknowledge.ack(msg).commit *>
+                Message.noResponse
+
+            case Message.BestEffort(sender, Suspect(accusedIncarnation, _, `localNode`)) =>
+              ZSTM.atomically(
+                IncarnationSequence.nextAfter(accusedIncarnation).map { incarnation =>
+                  val alive = Alive(incarnation, localNode)
+                  Message.Batch(Message.BestEffort(sender, alive), Message.Broadcast(alive))
+                } <* LocalHealthMultiplier.increase
+              )
+
+            case Message.BestEffort(from, Suspect(incarnation, _, node)) =>
+              IncarnationSequence.current
+                .zip(
+                  nodeState(node).orElseSucceed(NodeState.Dead)
+                )
+                .flatMap {
+                  case (localIncarnation, _) if localIncarnation > incarnation =>
+                    STM.unit
+                  case (_, NodeState.Dead) =>
+                    STM.unit
+                  case (_, NodeState.Suspect) =>
+                    SuspicionTimeout.incomingSuspect(node, from)
+                  case (_, _) =>
+                    changeNodeState(node, NodeState.Suspect).ignore
+                }
+                .commit *> Message.noResponse
+
+            case Message.BestEffort(sender, msg @ Dead(_, _, nodeAddress)) if sender == nodeAddress =>
+              changeNodeState(nodeAddress, NodeState.Left).ignore
+                .as(Message.Broadcast(msg))
+                .commit
+
+            case Message.BestEffort(_, msg @ Dead(_, _, nodeAddress)) =>
+              nodeState(nodeAddress)
+                .orElseSucceed(NodeState.Dead)
+                .flatMap {
+                  case NodeState.Dead =>
+                    STM.succeed(Message.NoResponse)
+                  case _ =>
+                    changeNodeState(nodeAddress, NodeState.Dead).ignore
+                      .as(Message.Broadcast(msg))
+                }
+                .commit
+
+            case Message.BestEffort(_, msg @ Alive(_, nodeAddress)) =>
+              ZSTM.atomically(
+                SuspicionTimeout.cancelTimeout(nodeAddress) *>
+                  changeNodeState(nodeAddress, NodeState.Alive).ignore
+                    .as(Message.Broadcast(msg))
+              )
+          },
+          ZStream
+            .repeatEffectWith(
+              nextNode().zip(MessageSequenceNo.next).commit,
+              Schedule.forever.addDelayM(_ => LocalHealthMultiplier.scaleTimeout(protocolPeriod).commit)
+            )
+            .collectM {
+              case (Some((probedNodeName, probeNode)), seqNo) =>
+                ZSTM.atomically(
+                  MessageAcknowledge.register(Ack(seqNo)) *>
+                    IncarnationSequence.current.flatMap(incarnation =>
+                      Message.withScaledTimeout(
+                        if (probeNode.state != NodeState.Alive)
+                          Message.Batch(
+                            Message.BestEffort(probedNodeName, Ping(seqNo)),
+                            //this is part of buddy system
+                            Message.BestEffort(probedNodeName, Suspect(incarnation, localNode, probedNodeName))
+                          )
+                        else
+                          Message.BestEffort(probedNodeName, Ping(seqNo)),
+                        pingTimeoutAction(
+                          seqNo,
+                          probedNodeName,
+                          localNode,
+                          protocolTimeout
+                        ),
+                        protocolTimeout
+                      )
+                    )
+                )
+            }
+        )
       }
 
+  private def pingTimeoutAction(
+    seqNo: Long,
+    probedNode: NodeName,
+    localNode: NodeName,
+    protocolTimeout: Duration
+  ): ZIO[
+    LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
+    Error,
+    Message[messages.FailureDetection]
+  ] =
+    ZIO.ifM(MessageAcknowledge.isCompleted(Ack(seqNo)).commit)(
+      Message.noResponse,
+      log.warn(s"node: $probedNode missed ack with id ${seqNo}") *>
+        ZSTM.atomically(
+          LocalHealthMultiplier.increase *>
+            nextNode(Some(probedNode)).flatMap {
+              case Some((next, _)) =>
+                MessageAcknowledge.register(Nack(seqNo)) *>
+                  Message.withScaledTimeout(
+                    Message.BestEffort(next, PingReq(seqNo, probedNode)),
+                    pingReqTimeoutAction(
+                      seqNo = seqNo,
+                      probedNode = probedNode,
+                      localNode = localNode
+                    ),
+                    protocolTimeout
+                  )
+
+              case None =>
+                // we don't know any other node to ask
+                changeNodeState(probedNode, NodeState.Dead).as(Message.NoResponse)
+            }
+        )
+    )
+
+  private def pingReqTimeoutAction(
+    seqNo: Long,
+    probedNode: NodeName,
+    localNode: NodeName
+  ): ZIO[
+    Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
+    Error,
+    Message[messages.FailureDetection]
+  ] =
+    ZIO.ifM(MessageAcknowledge.isCompleted(Ack(seqNo)).commit)(
+      Message.noResponse,
+      ZSTM.atomically(
+        MessageAcknowledge.ack(Ack(seqNo)) *>
+          (LocalHealthMultiplier.increase *> MessageAcknowledge.ack(Nack(seqNo)))
+            .whenM(MessageAcknowledge.isCompleted(Nack(seqNo)).map(!_)) *>
+          changeNodeState(probedNode, NodeState.Suspect) *>
+          IncarnationSequence.current.flatMap(currentIncarnation =>
+            Message.withTimeout[SuspicionTimeout, messages.FailureDetection](
+              Message.Broadcast(Suspect(currentIncarnation, localNode, probedNode)),
+              SuspicionTimeout
+                .registerTimeout(probedNode)
+                .commit
+                .flatMap(_.awaitAction)
+                .orElse(Message.noResponse),
+              Duration.Zero
+            )
+          )
+      )
+    )
 }

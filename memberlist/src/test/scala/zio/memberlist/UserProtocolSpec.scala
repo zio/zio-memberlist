@@ -1,7 +1,7 @@
 package zio.memberlist
 
 import zio.memberlist.encoding.ByteCodec
-import zio.memberlist.protocols.User
+import zio.memberlist.protocols.messages.User
 import zio.test.Assertion.equalTo
 import zio.test._
 

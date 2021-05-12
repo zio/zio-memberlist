@@ -36,25 +36,19 @@ object udp {
                       .receive(buffer)
                       .mapError(ExceptionWrapper)
                       .tap(_ => buffer.flip)
-                      .map {
-                        case Some(addr) =>
-                          new Channel(
-                            bytes => buffer.getChunk(bytes).mapError(ExceptionWrapper),
-                            chunk => Buffer.byte(chunk).flatMap(server.send(_, addr)).mapError(ExceptionWrapper).unit,
-                            ZIO.succeed(true),
-                            ZIO.unit
+                      .flatMap {
+                        case Some(remoteAddr) =>
+                          connectionHandler(
+                            new Channel(
+                              bytes => buffer.getChunk(bytes).mapError(ExceptionWrapper),
+                              chunk =>
+                                Buffer.byte(chunk).flatMap(server.send(_, remoteAddr)).mapError(ExceptionWrapper).unit,
+                              ZIO.succeed(true),
+                              ZIO.unit
+                            )
                           )
-                        case None =>
-                          new Channel(
-                            bytes => buffer.flip.flatMap(_ => buffer.getChunk(bytes)).mapError(ExceptionWrapper),
-                            _ => ZIO.fail(new RuntimeException("Cannot reply")).mapError(ExceptionWrapper).unit,
-                            ZIO.succeed(true),
-                            ZIO.unit
-                          )
+                        case None => ZIO.unit //this is situation when channel is configure for non blocking.
                       }
-                      .flatMap(
-                        connectionHandler
-                      )
                   )
                   .forever
                   .fork
@@ -62,23 +56,25 @@ object udp {
                     val local = server.localAddress
                       .flatMap(opt => IO.effect(opt.get).orDie)
                       .mapError(ExceptionWrapper(_))
-                    new Bind(server.isOpen, close.unit, local)
+                    new Bind(
+                      server.isOpen,
+                      close.unit,
+                      local,
+                      (addr, data) => {
+                        val size = data.size
+                        Buffer
+                          .byte(
+                            Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte) ++ data
+                          )
+                          .flatMap(server.send(_, addr))
+                          .mapError(ExceptionWrapper)
+                          .unit
+                      }
+                    )
                   }
             }
             .provide(env)
 
-        def connect(to: SocketAddress): Managed[TransportError, Channel] =
-          DatagramChannel
-            .connect(to)
-            .mapM(channel =>
-              Channel.withLock(
-                channel.read(_).mapError(ExceptionWrapper),
-                channel.write(_).mapError(ExceptionWrapper).unit,
-                ZIO.succeed(true),
-                ZIO.unit
-              )
-            )
-            .mapError(ExceptionWrapper)
       }
     }
 }

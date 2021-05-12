@@ -22,6 +22,4 @@ package object transport {
           .bind(localAddr)(conn => connectionHandler(conn).provide(env))
       )
 
-  def connect(to: SocketAddress): ZManaged[ConnectionLessTransport, TransportError, Channel] =
-    ZManaged.environment[ConnectionLessTransport].flatMap(_.get.connect(to))
 }

@@ -1,19 +1,33 @@
 package zio.memberlist
 
-import zio.memberlist.protocols.FailureDetection._
-import zio.memberlist.protocols.{ FailureDetection, Initial }
+import zio.memberlist.protocols.messages.FailureDetection._
+import zio.memberlist.protocols.messages._
 import zio.test._
+import zio.memberlist.encoding.ByteCodec
+import zio.memberlist.protocols.messages.MemberlistMessage
 
 object ByteCodecSpec extends DefaultRunnableSpec {
+
+  implicit val codec: ByteCodec[MemberlistMessage] = ByteCodec.tagged[MemberlistMessage][
+    Ping,
+    Ack,
+    Nack,
+    PingReq,
+    Suspect,
+    Alive,
+    Dead,
+    Initial.Join,
+    Initial.Accept.type,
+    Initial.Reject
+  ]
 
   def spec =
     suite("ByteCodec")(
       //swim failure detection
-      ByteCodecLaws[Ping.type](gens.ping),
-      ByteCodecLaws[Ack.type](gens.ack),
-      ByteCodecLaws[Nack.type](gens.nack),
+      ByteCodecLaws[Ping](gens.ping),
+      ByteCodecLaws[Ack](gens.ack),
+      ByteCodecLaws[Nack](gens.nack),
       ByteCodecLaws[PingReq](gens.pingReq),
-      ByteCodecLaws[FailureDetection](gens.failureDetectionProtocol),
       //swim suspicion
       ByteCodecLaws[Suspect](gens.suspect),
       ByteCodecLaws[Alive](gens.alive),
@@ -22,6 +36,6 @@ object ByteCodecSpec extends DefaultRunnableSpec {
       ByteCodecLaws[Initial.Join](gens.swimJoin),
       ByteCodecLaws[Initial.Accept.type](gens.swimAccept),
       ByteCodecLaws[Initial.Reject](gens.swimReject),
-      ByteCodecLaws[Initial](gens.initialSwimlProtocol)
+      ByteCodecLaws[MemberlistMessage](Gen.oneOf(gens.failureDetectionProtocol, gens.initialSwimlProtocol))
     )
 }

@@ -2,6 +2,8 @@ package zio.memberlist
 
 import zio.duration.Duration
 import zio.memberlist.Message._
+import zio.memberlist.state.NodeName
+import zio.stm.ZSTM
 import zio.{ IO, UIO, ZIO }
 
 sealed trait Message[+A] {
@@ -9,7 +11,7 @@ sealed trait Message[+A] {
 
   final def transformM[B](fn: A => IO[Error, B]): IO[Error, Message[B]] =
     self match {
-      case msg: Message.Direct[A] =>
+      case msg: Message.BestEffort[A] =>
         fn(msg.message).map(b => msg.copy(message = b))
       case msg: Message.Broadcast[A] =>
         fn(msg.message).map(b => msg.copy(message = b))
@@ -30,7 +32,7 @@ sealed trait Message[+A] {
 
 object Message {
 
-  final case class Direct[A](node: NodeAddress, conversationId: Long, message: A) extends Message[A]
+  final case class BestEffort[A](node: NodeName, message: A) extends Message[A]
 
   final case class Batch[A](first: Message[A], second: Message[A], rest: Message[A]*) extends Message[A]
 
@@ -38,23 +40,25 @@ object Message {
 
   final case class WithTimeout[A](message: Message[A], action: IO[Error, Message[A]], timeout: Duration)
       extends Message[A]
-  case object NoResponse extends Message[Nothing]
 
-  def direct[A](node: NodeAddress, message: A): ZIO[ConversationId, Nothing, Direct[A]] =
-    ConversationId.next.map(Direct(node, _, message))
+  case object NoResponse extends Message[Nothing]
 
   def withTimeout[R, A](
     message: Message[A],
     action: ZIO[R, Error, Message[A]],
     timeout: Duration
-  ): ZIO[R, Nothing, WithTimeout[A]] =
+  ): ZSTM[R, Nothing, WithTimeout[A]] =
     for {
-      env <- ZIO.environment[R]
+      env <- ZSTM.environment[R]
     } yield WithTimeout(message, action.provide(env), timeout)
 
-  def withScaledTimeout[R, A](message: Message[A], action: ZIO[R, Error, Message[A]], timeout: Duration) =
+  def withScaledTimeout[R, A](
+    message: Message[A],
+    action: ZIO[R, Error, Message[A]],
+    timeout: Duration
+  ): ZSTM[LocalHealthMultiplier with R, Nothing, WithTimeout[A]] =
     for {
-      env    <- ZIO.environment[R]
+      env    <- ZSTM.environment[R]
       scaled <- LocalHealthMultiplier.scaleTimeout(timeout)
     } yield WithTimeout(message, action.provide(env), scaled)
 

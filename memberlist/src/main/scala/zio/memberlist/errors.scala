@@ -1,6 +1,7 @@
 package zio.memberlist
 
 import zio.duration.Duration
+import zio.memberlist.state.NodeName
 import zio.nio.core.SocketAddress
 
 sealed abstract class Error(val msg: String = "", val cause: Throwable = null) extends Exception(msg, cause)
@@ -39,7 +40,7 @@ sealed abstract class ClusterError(msg: String = "") extends Error(msg = msg)
 
 object ClusterError {
 
-  final case class UnknownNode(nodeId: NodeAddress) extends ClusterError(msg = nodeId.toString + " is not in cluster")
+  final case class UnknownNode(nodeId: NodeName) extends ClusterError(msg = nodeId.toString + " is not in cluster")
 
 }
 
@@ -75,6 +76,9 @@ object TransportError {
 
 object SwimError {
 
-  final case class SuspicionTimeoutCancelled(nodeAddress: NodeAddress)
-      extends Error(s"Suspicion timeout for node: $nodeAddress has been cancelled")
+  final case class SuspicionTimeoutCancelled(node: NodeName)
+      extends Error(s"Suspicion timeout for node: $node has been cancelled")
+
+  final case class SuspicionTimeoutAlreadyStarted(node: NodeName)
+      extends Error(s"Suspicion timeout for node: $node already started")
 }

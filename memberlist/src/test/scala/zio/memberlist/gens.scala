@@ -1,9 +1,9 @@
 package zio.memberlist
 
 import java.util.UUID
-
-import zio.memberlist.protocols.FailureDetection._
-import zio.memberlist.protocols._
+import zio.memberlist.protocols.messages.FailureDetection._
+import zio.memberlist.protocols.messages._
+import zio.memberlist.state.NodeName
 import zio.memberlist.uuid.makeRandomUUID
 import zio.random.Random
 import zio.test._
@@ -13,29 +13,52 @@ object gens {
   val nodeAddress: Gen[Random with Sized, NodeAddress] =
     Gen.listOf(Gen.anyByte).map(_.toArray).zipWith(Gen.anyInt)(NodeAddress.apply)
 
+  val nodeName: Gen[Random with Sized, NodeName] =
+    Gen.alphaNumericString.map(NodeName.apply)
+
   val uuid: Gen[Any, UUID] =
     Gen.fromEffect(makeRandomUUID)
 
-  val ping: Gen[Any, Ping.type] =
-    Gen.const(Ping)
+  val ping: Gen[Random, Ping] =
+    for {
+      seqNo <- Gen.anyLong
+    } yield Ping(seqNo)
 
-  val ack: Gen[Any, Ack.type] =
-    Gen.const(Ack)
+  val ack: Gen[Random, Ack] =
+    for {
+      seqNo <- Gen.anyLong
+    } yield Ack(seqNo)
 
-  val nack: Gen[Any, Nack.type] =
-    Gen.const(Nack)
+  val nack: Gen[Random, Nack] =
+    for {
+      seqNo <- Gen.anyLong
+    } yield Nack(seqNo)
 
   val pingReq: Gen[Random with Sized, PingReq] =
-    nodeAddress.map(PingReq)
+    for {
+      seqNo <- Gen.anyLong
+      to    <- nodeName
+    } yield PingReq(seqNo, to)
 
   val suspect: Gen[Random with Sized, Suspect] =
-    nodeAddress.zip(nodeAddress).map { case (from, to) => Suspect(from, to) }
+    for {
+      incarnation <- Gen.anyLong
+      from        <- nodeName
+      to          <- nodeName
+    } yield Suspect(incarnation, from, to)
 
   val alive: Gen[Random with Sized, Alive] =
-    nodeAddress.map(Alive)
+    for {
+      incarnation <- Gen.anyLong
+      from        <- nodeName
+    } yield Alive(incarnation, from)
 
   val dead: Gen[Random with Sized, Dead] =
-    nodeAddress.map(Dead)
+    for {
+      incarnation <- Gen.anyLong
+      from        <- nodeName
+      to          <- nodeName
+    } yield Dead(incarnation, from, to)
 
   val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =
     Gen.oneOf(ping, ack, nack, pingReq, suspect, alive, dead)

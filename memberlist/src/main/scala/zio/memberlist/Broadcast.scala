@@ -1,6 +1,7 @@
 package zio.memberlist
 
 import zio.memberlist.Broadcast.Item
+import zio.memberlist.state._
 import zio.stm.{ STM, TRef }
 import zio.{ Chunk, UIO, URIO, ZIO }
 
@@ -24,8 +25,8 @@ final class Broadcast(
           .flatMap[Any, Nothing, Unit](seqId =>
             ref.update(items => items ++ TreeSet(Item(seqId, resent, message.message)))
           )
-          .commit
       )
+      .commit
 
   def broadcast(currentMessageSize: Int): UIO[List[Chunk[Byte]]] =
     ref.modify { items =>

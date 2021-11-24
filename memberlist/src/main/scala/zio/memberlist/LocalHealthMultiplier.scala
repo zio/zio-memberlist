@@ -1,7 +1,7 @@
 package zio.memberlist
 
 import zio.duration._
-import zio.stm.TRef
+import zio.stm.{ TRef, URSTM, USTM, ZSTM }
 import zio._
 
 /**
@@ -17,37 +17,45 @@ import zio._
 object LocalHealthMultiplier {
 
   trait Service {
-    def increase: UIO[Unit]
-    def decrease: UIO[Unit]
-    def scaleTimeout(timeout: Duration): UIO[Duration]
+    def increase: USTM[Unit]
+    def decrease: USTM[Unit]
+    def scaleTimeout(timeout: Duration): USTM[Duration]
   }
 
-  def increase: URIO[LocalHealthMultiplier, Unit] =
-    ZIO.accessM[LocalHealthMultiplier](_.get.increase)
+  def increase: URSTM[LocalHealthMultiplier, Unit] =
+    ZSTM.accessM[LocalHealthMultiplier](_.get.increase)
 
-  def decrease: URIO[LocalHealthMultiplier, Unit] =
-    ZIO.accessM[LocalHealthMultiplier](_.get.decrease)
+  def decrease: URSTM[LocalHealthMultiplier, Unit] =
+    ZSTM.accessM[LocalHealthMultiplier](_.get.decrease)
 
-  def scaleTimeout(timeout: Duration): URIO[LocalHealthMultiplier, Duration] =
-    ZIO.accessM[LocalHealthMultiplier](_.get.scaleTimeout(timeout))
+  def scaleTimeout(timeout: Duration): URSTM[LocalHealthMultiplier, Duration] =
+    ZSTM.accessM[LocalHealthMultiplier](_.get.scaleTimeout(timeout))
+
+  private def live0(max: Int): UIO[LocalHealthMultiplier.Service] =
+    TRef
+      .makeCommit(0)
+      .map(ref =>
+        new Service {
+
+          override def increase: USTM[Unit] =
+            ref.update(current => math.min(current + 1, max))
+
+          override def decrease: USTM[Unit] =
+            ref.update(current => math.max(current - 1, 0))
+
+          override def scaleTimeout(timeout: Duration): USTM[Duration] =
+            ref.get.map(score => timeout * (score.toDouble + 1.0))
+        }
+      )
+
+  val liveWithConfig: ZLayer[Has[MemberlistConfig], Nothing, LocalHealthMultiplier] =
+    ZLayer.fromEffect(
+      zio.config.config[MemberlistConfig].flatMap(config => live0(config.localHealthMaxMultiplier))
+    )
 
   def live(max: Int): ULayer[LocalHealthMultiplier] =
     ZLayer.fromEffect(
-      TRef
-        .makeCommit(0)
-        .map(ref =>
-          new Service {
-
-            override def increase: UIO[Unit] =
-              ref.update(current => math.min(current + 1, max)).commit
-
-            override def decrease: UIO[Unit] =
-              ref.update(current => math.max(current - 1, 0)).commit
-
-            override def scaleTimeout(timeout: Duration): UIO[Duration] =
-              ref.get.commit.map(score => timeout * (score.toDouble + 1.0))
-          }
-        )
+      live0(max)
     )
 
 }

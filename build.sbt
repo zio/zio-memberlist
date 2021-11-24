@@ -20,7 +20,7 @@ inThisBuild(
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
 
-val zioVersion        = "1.0.0"
+val zioVersion        = "1.0.1"
 val zioNioVersion     = "1.0.0-RC9"
 val zioLoggingVersion = "0.4.0"
 val zioConfigVersion  = "1.0.0-RC26"
@@ -28,7 +28,7 @@ val zioConfigVersion  = "1.0.0-RC26"
 lazy val root = project
   .in(file("."))
   .settings(skip in publish := true)
-  .aggregate(memberlist)
+  .aggregate(memberlist, k8_experiment)
 
 lazy val memberlist =
   project
@@ -44,6 +44,7 @@ lazy val memberlist =
         "dev.zio"                %% "zio-config"              % zioConfigVersion,
         "com.lihaoyi"            %% "upickle"                 % "1.2.0",
         "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
+        "com.github.xuwei-k"     %% "msgpack4z-native"        % "0.3.6",
         "dev.zio"                %% "zio-test"                % zioVersion % Test,
         "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test,
         ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
@@ -51,6 +52,24 @@ lazy val memberlist =
       )
     )
     .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
+
+lazy val k8_experiment = project
+  .in(file("k8-experiment"))
+  .settings(stdSettings("zio-memberlist-k8-experiment"))
+  .settings(
+    dockerBaseImage := "openjdk:11",
+    dockerExposedPorts := Seq(5557),
+    dockerUpdateLatest := false,
+    dockerEntrypoint := Seq("bin/test-node"),
+    dynverSeparator in ThisBuild := "-"
+  )
+  .dependsOn(memberlist)
+  .settings(
+    fork := true,
+    scalacOptions --= Seq("-Ywarn-dead-code", "-Wdead-code")
+  )
+  .enablePlugins(JavaAppPackaging)
+  .enablePlugins(DockerPlugin)
 
 lazy val docs = project
   .in(file("zio-memberlist-docs"))

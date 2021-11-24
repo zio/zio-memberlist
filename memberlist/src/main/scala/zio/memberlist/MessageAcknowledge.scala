@@ -1,41 +1,41 @@
 package zio.memberlist
 
-import zio.stm.TSet
-import zio.{ UIO, ULayer, URIO, ZIO, ZLayer }
+import zio.stm.{ TSet, URSTM, USTM, ZSTM }
+import zio.{ ULayer, ZLayer }
 
 object MessageAcknowledge {
 
   trait Service {
-    def ack(conversationId: Long): UIO[Unit]
-    def register(conversationId: Long): UIO[Unit]
-    def isCompleted(conversationId: Long): UIO[Boolean]
+    def ack[A](msg: A): USTM[Unit]
+    def register[A](msg: A): USTM[Unit]
+    def isCompleted[A](msg: A): USTM[Boolean]
   }
 
-  def ack(conversationId: Long): URIO[MessageAcknowledge, Unit] =
-    ZIO.accessM[MessageAcknowledge](_.get.ack(conversationId))
+  def ack[A](msg: A): URSTM[MessageAcknowledge, Unit] =
+    ZSTM.accessM[MessageAcknowledge](_.get.ack(msg))
 
-  def register(conversationId: Long): URIO[MessageAcknowledge, Unit] =
-    ZIO.accessM[MessageAcknowledge](_.get.register(conversationId))
+  def register[A](msg: A): URSTM[MessageAcknowledge, Unit] =
+    ZSTM.accessM[MessageAcknowledge](_.get.register(msg))
 
-  def isCompleted(conversationId: Long): URIO[MessageAcknowledge, Boolean] =
-    ZIO.accessM[MessageAcknowledge](_.get.isCompleted(conversationId))
+  def isCompleted[A](msg: A): URSTM[MessageAcknowledge, Boolean] =
+    ZSTM.accessM[MessageAcknowledge](_.get.isCompleted(msg))
 
   val live: ULayer[MessageAcknowledge] =
     ZLayer.fromEffect(
       TSet
-        .empty[Long]
+        .empty[Any]
         .commit
         .map(pendingAcks =>
           new Service {
 
-            override def ack(conversationId: Long): UIO[Unit] =
-              pendingAcks.delete(conversationId).commit
+            override def ack[A](msg: A): USTM[Unit] =
+              pendingAcks.delete(msg)
 
-            override def register(conversationId: Long): UIO[Unit] =
-              pendingAcks.put(conversationId).commit
+            override def register[A](msg: A): USTM[Unit] =
+              pendingAcks.put(msg)
 
-            override def isCompleted(conversationId: Long): UIO[Boolean] =
-              pendingAcks.contains(conversationId).map(!_).commit
+            override def isCompleted[A](msg: A): USTM[Boolean] =
+              pendingAcks.contains(msg).map(!_)
           }
         )
     )

@@ -1,7 +1,7 @@
 package zio.memberlist
 
 import zio._
-import zio.memberlist.Messages.WithPiggyback
+import zio.memberlist.protocols.messages.WithPiggyback
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.transport.{ Bind, Channel, ConnectionLessTransport }
 import zio.nio.core.SocketAddress
@@ -27,18 +27,17 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
 
       }
       .fork
-      .as(new Bind(in.isShutdown, in.shutdown, ZIO.succeed(localAddr)))
-      .toManaged(_.close.ignore)
-
-  override def connect(to: SocketAddress): zio.Managed[TransportError, Channel] =
-    ZManaged.succeed(
-      new Channel(
-        _ => ZIO.succeed(Chunk.empty),
-        chunk => ByteCodec[WithPiggyback].fromChunk(chunk.drop(4)).flatMap(out.offer).ignore,
-        ZIO.succeed(true),
-        ZIO.unit
+      .as(
+        new Bind(
+          in.isShutdown,
+          in.shutdown,
+          ZIO.succeed(localAddr),
+          (_, chunk) => {
+            ByteCodec[WithPiggyback].fromChunk(chunk).flatMap(out.offer).ignore
+          }
+        )
       )
-    )
+      .toManaged(_.close.ignore)
 
   def incommingMessage(msg: WithPiggyback): UIO[Boolean] = in.offer(msg)
   def outgoingMessages: Stream[Nothing, WithPiggyback]   = ZStream.fromQueue(out)

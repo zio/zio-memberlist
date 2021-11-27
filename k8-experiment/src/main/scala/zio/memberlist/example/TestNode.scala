@@ -3,15 +3,13 @@ package zio.memberlist.example
 import upickle.default.macroRW
 import zio.clock.Clock
 import zio.config.getConfig
-import zio.console.putStrLn
 import zio.duration._
 import zio.logging.{Logging, log}
 import zio.memberlist._
 import zio.memberlist.discovery.Discovery
 import zio.memberlist.encoding.ByteCodec
 import zio.nio.core.InetAddress
-import zio.{ExitCode, ZIO, ZLayer}
-import zio.{Has, URIO, ZEnv}
+import zio.{ExitCode, Has, URIO, ZEnv, ZIO, ZLayer}
 
 object TestNode extends zio.App {
 

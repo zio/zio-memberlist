@@ -91,7 +91,7 @@ class Index extends React.Component {
             </Container>
         );
 
-        
+
         const Features = () => (
             <Block layout="fourColumn">
                 {[

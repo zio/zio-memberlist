@@ -10,48 +10,80 @@ inThisBuild(
     ),
     pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
     pgpPublicRing := file("/tmp/public.asc"),
-    pgpSecretRing := file("/tmp/secret.asc"),
-    scmInfo := Some(
-      ScmInfo(url("https://github.com/zio/zio-memberlist/"), "scm:git:git@github.com:zio/zio-memberlist.git")
-    )
+    pgpSecretRing := file("/tmp/secret.asc")
   )
 )
 
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
-addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
+addCommandAlias("fix", "; all compile:scalafix test:scalafix; all scalafmtSbt scalafmtAll")
+addCommandAlias("check", "; scalafmtSbtCheck; scalafmtCheckAll; compile:scalafix --check; test:scalafix --check")
 
-val zioVersion        = "1.0.1"
-val zioNioVersion     = "1.0.0-RC9"
-val zioLoggingVersion = "0.4.0"
-val zioConfigVersion  = "1.0.0-RC26"
+addCommandAlias(
+  "testJVM",
+  ";zioMemberlistJVM/test"
+)
+addCommandAlias(
+  "testJS",
+  ";zioMemberlistJS/test"
+)
+addCommandAlias(
+  "testNative",
+  ";zioMemberlistNative/test:compile"
+)
+
+val zioVersion        = "1.0.9"
+val zioNioVersion     = "1.0.0-RC11"
+val zioLoggingVersion = "0.5.4"
+val zioConfigVersion  = "1.0.10"
 
 lazy val root = project
   .in(file("."))
-  .settings(skip in publish := true)
-  .aggregate(memberlist, k8_experiment)
+  .settings(
+    publish / skip := true
+    //unusedCompileDependenciesFilter -= moduleFilter("org.scala-js", "scalajs-library")
+  )
+  .aggregate(
+    zioMemberlistJVM,
+    zioMemberlistJS,
+    zioMemberlistNative,
+    k8_experiment,
+    docs
+  )
 
-lazy val memberlist =
-  project
-    .in(file("memberlist"))
-    .settings(stdSettings("zio-memberlist"))
-    .settings(buildInfoSettings("zio.memberlist"))
-    .settings(
-      libraryDependencies ++= Seq(
-        "dev.zio"                %% "zio"                     % zioVersion,
-        "dev.zio"                %% "zio-streams"             % zioVersion,
-        "dev.zio"                %% "zio-nio"                 % zioNioVersion,
-        "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
-        "dev.zio"                %% "zio-config"              % zioConfigVersion,
-        "com.lihaoyi"            %% "upickle"                 % "1.2.0",
-        "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
-        "com.github.xuwei-k"     %% "msgpack4z-native"        % "0.3.6",
-        "dev.zio"                %% "zio-test"                % zioVersion % Test,
-        "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test,
-        ("com.github.ghik" % "silencer-lib" % "1.6.0" % Provided).cross(CrossVersion.full),
-        compilerPlugin(("com.github.ghik" % "silencer-plugin" % "1.6.0").cross(CrossVersion.full))
-      )
+lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+  .in(file("zio-memberlist"))
+  .settings(stdSettings("zio-memberlist"))
+  .settings(crossProjectSettings)
+  .settings(buildInfoSettings("zio.memberlist"))
+  .settings(
+    libraryDependencies ++= Seq(
+      "dev.zio"                %% "zio"                     % zioVersion,
+      "dev.zio"                %% "zio-streams"             % zioVersion,
+      "dev.zio"                %% "zio-nio"                 % zioNioVersion,
+      "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
+      "dev.zio"                %% "zio-config"              % zioConfigVersion,
+      "com.lihaoyi"            %% "upickle"                 % "1.2.0",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
+      "dev.zio"                %% "zio"                     % zioVersion,
+      "dev.zio"                %% "zio-test"                % zioVersion % Test,
+      "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test
     )
-    .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
+  )
+  .settings(testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
+  .enablePlugins(BuildInfoPlugin)
+
+lazy val zioMemberlistJS = zioMemberlist.js
+  .settings(jsSettings)
+  .settings(libraryDependencies += "dev.zio" %%% "zio-test-sbt" % zioVersion % Test)
+  .settings(scalaJSUseMainModuleInitializer := true)
+
+lazy val zioMemberlistJVM = zioMemberlist.jvm
+  .settings(dottySettings)
+  .settings(libraryDependencies += "dev.zio" %%% "zio-test-sbt" % zioVersion % Test)
+  .settings(scalaReflectTestSettings)
+
+lazy val zioMemberlistNative = zioMemberlist.native
+  .settings(nativeSettings)
 
 lazy val k8_experiment = project
   .in(file("k8-experiment"))
@@ -61,9 +93,9 @@ lazy val k8_experiment = project
     dockerExposedPorts := Seq(5557),
     dockerUpdateLatest := false,
     dockerEntrypoint := Seq("bin/test-node"),
-    dynverSeparator in ThisBuild := "-"
+    dynverSeparator := "-"
   )
-  .dependsOn(memberlist)
+  .dependsOn(zioMemberlistJVM)
   .settings(
     fork := true,
     scalacOptions --= Seq("-Ywarn-dead-code", "-Wdead-code")
@@ -73,22 +105,17 @@ lazy val k8_experiment = project
 
 lazy val docs = project
   .in(file("zio-memberlist-docs"))
+  .settings(stdSettings("zio-memberlist"))
   .settings(
-    skip.in(publish) := true,
+    publish / skip := true,
     moduleName := "zio-memberlist-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
-    libraryDependencies ++= Seq(
-      "dev.zio" %% "zio" % zioVersion
-    ),
-    mdocVariables := Map(
-      "VERSION" -> version.value
-    ),
-    unidocProjectFilter in (ScalaUnidoc, unidoc) := inProjects(root),
-    target in (ScalaUnidoc, unidoc) := (baseDirectory in LocalRootProject).value / "website" / "static" / "api",
-    cleanFiles += (target in (ScalaUnidoc, unidoc)).value,
-    docusaurusCreateSite := docusaurusCreateSite.dependsOn(unidoc in Compile).value,
-    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(unidoc in Compile).value
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioMemberlistJVM),
+    ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
+    cleanFiles += (ScalaUnidoc / unidoc / target).value,
+    docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
+    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value
   )
-  .dependsOn(root)
+  .dependsOn(zioMemberlistJVM)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)

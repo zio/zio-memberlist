@@ -1,14 +1,29 @@
-# ZIO Memberlist
+# zio-memberlist
 
 | Project Stage | CI | Release | Snapshot | Discord |
 | --- | --- | --- | --- | --- |
-| [![Project stage][Stage]][Stage-Page] | [![Build Status][Badge-Circle]][Link-Circle] | [![Release Artifacts][Badge-SonatypeReleases]][Link-SonatypeReleases] | [![Snapshot Artifacts][Badge-SonatypeSnapshots]][Link-SonatypeSnapshots] | [![Badge-Discord]][Link-Discord] |
+| [![Project stage][Badge-Stage]][Link-Stage-Page] | [![Build Status][Badge-Circle]][Link-Circle] | [![Release Artifacts][Badge-SonatypeReleases]][Link-SonatypeReleases] | [![Snapshot Artifacts][Badge-SonatypeSnapshots]][Link-SonatypeSnapshots] | [![Badge-Discord]][Link-Discord] |
 
+# Summary
 ZIO-based library for cluster membership and failure detection using gossip based protocol.
 
-This library is inspired by Hashicorp research on improving [SWIM](https://ieeexplore.ieee.org/document/1028914) protocol published in [Lifeguard](https://ieeexplore.ieee.org/document/1028914) paper. 
+This library is inspired by Hashicorp research on improving [SWIM](https://ieeexplore.ieee.org/document/1028914) protocol published in [Lifeguard](https://ieeexplore.ieee.org/document/1028914) paper.
 
 Please find more details on our [website](https://zio.github.io/zio-memberlist/).
+
+# Documentation
+[ZIO Memberlist Microsite](https://zio.github.io/zio-memberlist/)
+
+# Contributing
+[Documentation for contributors](https://zio.github.io/zio-memberlist/docs/about/about_contributing)
+
+## Code of Conduct
+
+See the [Code of Conduct](https://zio.github.io/zio-memberlist/docs/about/about_coc)
+
+## Support
+
+Come chat with us on [![Badge-Discord]][Link-Discord].
 
 
 # License

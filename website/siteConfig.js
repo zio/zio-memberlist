@@ -21,7 +21,7 @@ const users = [
 ];
 
 const siteConfig = {
-  title: 'zio-memberlist',
+  title: 'ZIO Memberlist',
   tagline: 'cluster membership and member failure detection using a gossip based protocol',
   url: 'https://zio.github.io',
   baseUrl: '/zio-memberlist/',
@@ -33,6 +33,7 @@ const siteConfig = {
   headerLinks: [
     {doc: 'overview/overview_index', label: 'Overview'},
     {doc: 'usecases/usecases_index', label: 'Use Cases'},
+    {href: 'api/index.html', label: 'API'},
     {doc: 'about/about_index', label: 'About'}
   ],
 

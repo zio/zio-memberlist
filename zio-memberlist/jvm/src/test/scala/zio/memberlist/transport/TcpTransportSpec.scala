@@ -17,7 +17,7 @@ import javax.net.ServerSocketFactory
 
 object TcpTransportSpec extends KeeperSpec {
 
-  val environment: ZLayer[Any with Any with Any, Nothing, Transport with Clock] =
+  val environment: ULayer[Has[Transport] with Clock] =
     ((Clock.live ++ Logging.ignore) >>> tcp.make(10, 10.seconds, 10.seconds)) ++ Clock.live
 
   def findAvailableTCPPort(minPort: Int, maxPort: Int): URIO[Live, Int] = {

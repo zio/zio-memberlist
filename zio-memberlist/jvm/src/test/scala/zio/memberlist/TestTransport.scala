@@ -7,7 +7,7 @@ import zio.memberlist.transport.{Bind, Channel, ConnectionLessTransport}
 import zio.nio.core.SocketAddress
 import zio.stream._
 
-class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends ConnectionLessTransport.Service {
+class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends ConnectionLessTransport {
 
   override def bind(
     localAddr: SocketAddress

@@ -19,19 +19,17 @@ object TestDiscovery {
   val nextPort: URIO[TestDiscovery, Int] =
     URIO.accessM[TestDiscovery](_.get.nextPortNumber)
 
-  val live: ZLayer[Logging with Random, Nothing, Discovery with TestDiscovery] =
-    ZLayer.fromEffectMany {
-      for {
-        logger     <- ZIO.environment[Logging]
-        _          <- logger.get.info("creating test discovery")
-        nodes      <- Ref.make(Set.empty[NodeAddress])
-        randomPort <- nextIntBounded(20000).map(_ + 10000)
-        ports      <- Ref.make(randomPort)
-        test        = new Test(nodes, ports, logger.get)
-      } yield Has.allOf[Discovery.Service, Service](test, test)
-    }
+  val live: ZLayer[Logging with Random, Nothing, Has[Discovery] with TestDiscovery] =
+    (for {
+      logger     <- ZIO.environment[Logging]
+      _          <- logger.get.info("creating test discovery")
+      nodes      <- Ref.make(Set.empty[NodeAddress])
+      randomPort <- nextIntBounded(20000).map(_ + 10000)
+      ports      <- Ref.make(randomPort)
+      test        = new Test(nodes, ports, logger.get)
+    } yield Has.allOf[Discovery, Service](test, test)).toLayerMany
 
-  trait Service extends Discovery.Service {
+  trait Service extends Discovery {
     def addMember(m: NodeAddress): UIO[Unit]
     def removeMember(m: NodeAddress): UIO[Unit]
     def nextPortNumber: UIO[Int]
@@ -42,7 +40,7 @@ object TestDiscovery {
     val discoverNodes: IO[TransportError, Set[InetSocketAddress]] =
       for {
         members <- ref.get
-        addrs   <- IO.collectAll(members.map(_.socketAddress))
+        addrs   <- IO.foreach(members)(_.socketAddress)
       } yield addrs.toSet
 
     def addMember(m: NodeAddress): UIO[Unit] =

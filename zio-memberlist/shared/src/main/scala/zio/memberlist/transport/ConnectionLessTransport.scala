@@ -4,9 +4,8 @@ import zio.memberlist.TransportError
 import zio.nio.core.SocketAddress
 import zio.{Managed, UIO}
 
-object ConnectionLessTransport {
-
-  trait Service {
-    def bind(localAddr: SocketAddress)(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind]
-  }
+trait ConnectionLessTransport {
+  def bind(localAddr: SocketAddress)(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind]
 }
+
+object ConnectionLessTransport {}

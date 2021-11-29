@@ -15,9 +15,9 @@ object udp {
    * @param mtu - maximum message size
    * @return layer with Udp transport
    */
-  def live(mtu: Int): ZLayer[Clock with Logging, Nothing, ConnectionLessTransport] =
+  def live(mtu: Int): ZLayer[Clock with Logging, Nothing, Has[ConnectionLessTransport]] =
     ZLayer.fromFunction { env =>
-      new ConnectionLessTransport.Service {
+      new ConnectionLessTransport {
         def bind(addr: SocketAddress)(connectionHandler: Channel => UIO[Unit]): Managed[TransportError, Bind] =
           DatagramChannel
             .bind(Some(addr))

@@ -8,7 +8,7 @@ import zio.memberlist.state.{NodeName, Nodes}
 import zio.memberlist.transport.ConnectionLessTransport
 import zio.nio.core.SocketAddress
 import zio.stream.{Take, ZStream}
-import zio.{Cause, Chunk, Exit, Fiber, IO, Queue, ZIO, ZManaged}
+import zio.{Cause, Chunk, Exit, Fiber, Has, IO, Queue, ZIO, ZManaged}
 
 class MessageSink(
   val local: NodeName,
@@ -20,7 +20,7 @@ class MessageSink(
   /**
    * Sends message to target.
    */
-  def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging with Nodes, Error, Unit] =
+  def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging with Has[Nodes], Error, Unit] =
     msg match {
       case Message.NoResponse                            => ZIO.unit
       case Message.BestEffort(nodeAddress, message)      =>
@@ -44,7 +44,7 @@ class MessageSink(
 
   def process(
     protocol: Protocol[Chunk[Byte]]
-  ): ZIO[Clock with Logging with Nodes, Nothing, Fiber.Runtime[Nothing, Unit]] = {
+  ): ZIO[Clock with Logging with Has[Nodes], Nothing, Fiber.Runtime[Nothing, Unit]] = {
     def processTake(take: Take[Error, Message[Chunk[Byte]]]) =
       take.foldM(
         ZIO.unit,
@@ -88,7 +88,7 @@ object MessageSink {
     local: NodeName,
     nodeAddress: NodeAddress,
     broadcast: Broadcast,
-    udpTransport: ConnectionLessTransport.Service
+    udpTransport: ConnectionLessTransport
   ): ZManaged[Logging, TransportError, MessageSink] =
     for {
       messageQueue <- Queue

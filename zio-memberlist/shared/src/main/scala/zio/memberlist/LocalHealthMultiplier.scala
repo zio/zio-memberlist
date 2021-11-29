@@ -14,28 +14,28 @@ import zio.stm.{TRef, URSTM, USTM, ZSTM}
  * - Refuting a suspect message about self: +1
  * - Probe with missed nack: +1
  */
+trait LocalHealthMultiplier {
+  def increase: USTM[Unit]
+  def decrease: USTM[Unit]
+  def scaleTimeout(timeout: Duration): USTM[Duration]
+}
+
 object LocalHealthMultiplier {
 
-  trait Service {
-    def increase: USTM[Unit]
-    def decrease: USTM[Unit]
-    def scaleTimeout(timeout: Duration): USTM[Duration]
-  }
+  def increase: URSTM[Has[LocalHealthMultiplier], Unit] =
+    ZSTM.accessM[Has[LocalHealthMultiplier]](_.get.increase)
 
-  def increase: URSTM[LocalHealthMultiplier, Unit] =
-    ZSTM.accessM[LocalHealthMultiplier](_.get.increase)
+  def decrease: URSTM[Has[LocalHealthMultiplier], Unit] =
+    ZSTM.accessM[Has[LocalHealthMultiplier]](_.get.decrease)
 
-  def decrease: URSTM[LocalHealthMultiplier, Unit] =
-    ZSTM.accessM[LocalHealthMultiplier](_.get.decrease)
+  def scaleTimeout(timeout: Duration): URSTM[Has[LocalHealthMultiplier], Duration] =
+    ZSTM.accessM[Has[LocalHealthMultiplier]](_.get.scaleTimeout(timeout))
 
-  def scaleTimeout(timeout: Duration): URSTM[LocalHealthMultiplier, Duration] =
-    ZSTM.accessM[LocalHealthMultiplier](_.get.scaleTimeout(timeout))
-
-  private def live0(max: Int): UIO[LocalHealthMultiplier.Service] =
+  private def live0(max: Int): UIO[LocalHealthMultiplier] =
     TRef
       .makeCommit(0)
       .map(ref =>
-        new Service {
+        new LocalHealthMultiplier {
 
           override def increase: USTM[Unit] =
             ref.update(current => math.min(current + 1, max))
@@ -48,10 +48,10 @@ object LocalHealthMultiplier {
         }
       )
 
-  val liveWithConfig: ZLayer[Has[MemberlistConfig], Nothing, LocalHealthMultiplier] =
+  val liveWithConfig: ZLayer[Has[MemberlistConfig], Nothing, Has[LocalHealthMultiplier]] =
     zio.config.getConfig[MemberlistConfig].flatMap(config => live0(config.localHealthMaxMultiplier)).toLayer
 
-  def live(max: Int): ULayer[LocalHealthMultiplier] =
+  def live(max: Int): ULayer[Has[LocalHealthMultiplier]] =
     live0(max).toLayer
 
 }

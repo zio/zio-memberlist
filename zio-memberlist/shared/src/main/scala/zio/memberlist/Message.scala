@@ -4,7 +4,7 @@ import zio.duration.Duration
 import zio.memberlist.Message._
 import zio.memberlist.state.NodeName
 import zio.stm.ZSTM
-import zio.{IO, UIO, ZIO}
+import zio.{Has, IO, UIO, ZIO}
 
 sealed trait Message[+A] {
   self =>
@@ -56,7 +56,7 @@ object Message {
     message: Message[A],
     action: ZIO[R, Error, Message[A]],
     timeout: Duration
-  ): ZSTM[LocalHealthMultiplier with R, Nothing, WithTimeout[A]] =
+  ): ZSTM[Has[LocalHealthMultiplier] with R, Nothing, WithTimeout[A]] =
     for {
       env    <- ZSTM.environment[R]
       scaled <- LocalHealthMultiplier.scaleTimeout(timeout)

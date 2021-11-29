@@ -16,7 +16,7 @@ private class K8DnsDiscovery(
   serviceDns: InetAddress,
   serviceDnsTimeout: Duration,
   servicePort: Int
-) extends Discovery.Service {
+) extends Discovery {
 
   final override val discoverNodes: IO[Error, Set[InetSocketAddress]] = {
     for {

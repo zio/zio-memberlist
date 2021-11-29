@@ -23,7 +23,9 @@ object FailureDetectionSpec extends KeeperSpec {
   val nodesLayer: ZLayer[
     Console with Clock with Console with Clock with Any with Any with Any with Any,
     Nothing,
-    Console with Clock with Logging with IncarnationSequence with MessageSequence with MessageAcknowledge with LocalHealthMultiplier with Nodes with SuspicionTimeout
+    Console with Clock with Logging with Has[IncarnationSequence] with Has[MessageSequenceNo] with Has[
+      MessageAcknowledge
+    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout]
   ] = (
     ZLayer.requires[Console] ++
       ZLayer.requires[Clock] ++
@@ -35,10 +37,9 @@ object FailureDetectionSpec extends KeeperSpec {
   ) >+> zio.memberlist.state.Nodes
     .live(NodeName("test-node")) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
 
-  val recorder
-    : ZLayer[Clock with Logging with Nodes with FailureDetection.Env, Nothing, ProtocolRecorder.ProtocolRecorder[
-      messages.FailureDetection
-    ]] =
+  val recorder: ZLayer[Clock with Logging with FailureDetection.Env, Nothing, ProtocolRecorder.ProtocolRecorder[
+    messages.FailureDetection
+  ]] =
     ProtocolRecorder
       .make(
         FailureDetection
@@ -48,9 +49,11 @@ object FailureDetectionSpec extends KeeperSpec {
       .orDie
 
   val testLayer: ZLayer[
-    Console with Clock with Console with Clock with Any with Any with Any with Any,
+    Console with Clock,
     Nothing,
-    Console with Clock with Logging with IncarnationSequence with MessageSequence with MessageAcknowledge with LocalHealthMultiplier with Nodes with SuspicionTimeout with ProtocolRecorder.ProtocolRecorder[
+    Console with Clock with Logging with Has[IncarnationSequence] with Has[MessageSequenceNo] with Has[
+      MessageAcknowledge
+    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout] with ProtocolRecorder.ProtocolRecorder[
       messages.FailureDetection
     ]
   ] = nodesLayer >+> recorder

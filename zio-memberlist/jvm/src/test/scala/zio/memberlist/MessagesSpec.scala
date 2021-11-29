@@ -15,7 +15,7 @@ object MessagesSpec extends KeeperSpec {
 
   val logger: ZLayer[zio.console.Console with Clock, Nothing, Logging] = Logging.console()
 
-  val messages: ZManaged[Nodes with Logging, TransportError, (TestTransport, MessageSink)] = for {
+  val messages: ZManaged[Has[Nodes] with Logging, TransportError, (TestTransport, MessageSink)] = for {
     local     <- NodeAddress.local(1111).toManaged_
     transport <- TestTransport.make
     broadcast <- Broadcast.make(64000, 2).toManaged_

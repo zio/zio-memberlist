@@ -43,7 +43,7 @@ object NodesSpec extends KeeperSpec {
         _    <- addNode(testNode).commit
         _    <- addNode(testNode).commit
         next <- nextNode().commit
-      } yield assertTrue(next.get == (testNode.name, testNode))
+      } yield assertTrue(next.get == Tuple2(testNode.name, testNode))
     },
     testM("exclude node") {
       val testNode1 = Node(NodeName("test-node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)

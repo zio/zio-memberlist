@@ -4,7 +4,7 @@ import zio.config.ConfigDescriptor._
 import zio.config.{ConfigDescriptor, ReadError, ZConfig}
 import zio.duration.{Duration, _}
 import zio.memberlist.state.NodeName
-import zio.{Has, Layer, ZLayer}
+import zio.{Has, ZLayer}
 
 case class MemberlistConfig(
   name: NodeName,

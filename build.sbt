@@ -62,7 +62,7 @@ lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       "dev.zio"                %% "zio-nio"                 % zioNioVersion,
       "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
       "dev.zio"                %% "zio-config"              % zioConfigVersion,
-      "com.lihaoyi"            %% "upickle"                 % "1.2.0",
+      "com.lihaoyi"            %% "upickle"                 % "1.4.2",
       "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
       "dev.zio"                %% "zio"                     % zioVersion,
       "dev.zio"                %% "zio-test"                % zioVersion % Test,

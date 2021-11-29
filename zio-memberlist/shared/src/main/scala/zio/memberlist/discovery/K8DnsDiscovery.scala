@@ -3,7 +3,7 @@ package zio.memberlist.discovery
 import zio.duration.Duration
 import zio.logging.Logger
 import zio.memberlist.{Error, ServiceDiscoveryError}
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{InetAddress, InetSocketAddress}
 import zio.{IO, UIO, ZIO}
 
 import java.net.UnknownHostException

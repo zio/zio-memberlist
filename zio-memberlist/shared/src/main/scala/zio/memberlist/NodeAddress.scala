@@ -3,7 +3,7 @@ package zio.memberlist
 import upickle.default._
 import zio.memberlist.TransportError._
 import zio.memberlist.encoding.ByteCodec
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{InetAddress, InetSocketAddress}
 import zio.{Chunk, IO, UIO}
 
 final case class NodeAddress(ip: Chunk[Byte], port: Int) {

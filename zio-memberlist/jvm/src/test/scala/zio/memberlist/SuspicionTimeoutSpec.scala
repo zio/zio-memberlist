@@ -6,8 +6,8 @@ import zio.logging.Logging
 import zio.memberlist.SwimError.{SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled}
 import zio.memberlist.state._
 import zio.test.Assertion.{equalTo, isLeft}
+import zio.test._
 import zio.test.environment.{TestClock, TestEnvironment}
-import zio.test.{Spec, TestFailure, TestSuccess, assert, assertTrue, suite, testM}
 import zio.{Chunk, ZIO, ZLayer}
 
 object SuspicionTimeoutSpec extends KeeperSpec {

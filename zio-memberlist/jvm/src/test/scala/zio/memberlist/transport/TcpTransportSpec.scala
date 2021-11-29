@@ -4,18 +4,16 @@ import zio._
 import zio.clock.Clock
 import zio.duration._
 import zio.logging.Logging
-import zio.memberlist.{KeeperSpec, NodeAddress}
+import zio.memberlist.{KeeperSpec, NodeAddress, TransportError}
 import zio.random.Random
 import zio.stream.ZStream
 import zio.test.Assertion.{equalTo, isInterrupted, isSome}
 import zio.test.TestAspect.{flaky, ignore, timeout}
 import zio.test._
-import zio.test.environment.Live
+import zio.test.environment.{Live, TestEnvironment}
 
 import java.net.InetAddress
 import javax.net.ServerSocketFactory
-import zio.memberlist.TransportError
-import zio.test.environment.TestEnvironment
 
 object TcpTransportSpec extends KeeperSpec {
 

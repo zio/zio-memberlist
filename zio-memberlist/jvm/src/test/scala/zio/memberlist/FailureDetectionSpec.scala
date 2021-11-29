@@ -11,8 +11,7 @@ import zio.memberlist.state._
 import zio.test.Assertion.equalTo
 import zio.test.TestAspect.ignore
 import zio.test._
-import zio.test.environment.TestClock
-import zio.test.environment.TestEnvironment
+import zio.test.environment.{TestClock, TestEnvironment}
 
 object FailureDetectionSpec extends KeeperSpec {
 

@@ -33,7 +33,7 @@ addCommandAlias(
 
 val zioVersion        = "1.0.9"
 val zioNioVersion     = "1.0.0-RC11"
-val zioLoggingVersion = "0.5.4"
+val zioLoggingVersion = "0.5.14"
 val zioConfigVersion  = "1.0.10"
 
 lazy val root = project

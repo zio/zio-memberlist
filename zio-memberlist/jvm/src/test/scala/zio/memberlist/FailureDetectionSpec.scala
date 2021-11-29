@@ -99,7 +99,7 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(10.seconds)
         msg      <- recorder.collectN(1) { case Message.BestEffort(_, msg: PingReq) => msg }
-      } yield assertTrue(msg == List(PingReq(1, node1.name)))
+      } yield assertTrue(msg.map(_.target) == List(node1.name))
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
       for {

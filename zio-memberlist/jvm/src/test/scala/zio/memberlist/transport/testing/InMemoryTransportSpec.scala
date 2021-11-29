@@ -1,18 +1,17 @@
 package zio.memberlist.transport.testing
 
+import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration._
 import zio.memberlist.KeeperSpec
 import zio.memberlist.transport.Transport
 import zio.memberlist.transport.testing.InMemoryTransport.asNode
+import zio.random.Random
 import zio.test.Assertion._
 import zio.test.TestAspect.nonFlaky
 import zio.test._
-import zio.{Chunk, Promise, Schedule, ZLayer}
-import zio.Has
-import zio.blocking.Blocking
-import zio.random.Random
 import zio.test.environment.{TestClock, TestConsole, TestRandom, TestSystem}
+import zio.{Chunk, Has, Promise, Schedule, ZLayer}
 
 object InMemoryTransportSpec extends KeeperSpec {
 

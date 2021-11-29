@@ -6,8 +6,7 @@ import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.state.NodeName
 import zio.stream.ZStream
 import zio.test.Assertion.equalTo
-import zio.test.{assert, suite, testM}
-import zio.test.{Spec, TestFailure, TestSuccess}
+import zio.test.{Spec, TestFailure, TestSuccess, assert, suite, testM}
 
 object ProtocolSpec extends KeeperSpec {
 

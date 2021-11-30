@@ -58,7 +58,7 @@ lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "dev.zio"                %% "zio"                     % zioVersion,
       "dev.zio"                %% "zio-streams"             % zioVersion,
-      "dev.zio"                %% "zio-nio"                 % zioNioVersion,
+      ("dev.zio"               %% "zio-nio"                 % zioNioVersion).exclude("org.scala-lang.modules", "scala-collection-compat_2.13"),
       "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
       "dev.zio"                %% "zio-config"              % zioConfigVersion,
       "com.lihaoyi"            %% "upickle"                 % "1.4.2",

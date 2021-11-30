@@ -30,7 +30,7 @@ object SuspicionTimeout {
   def cancelTimeout(node: NodeName): URSTM[Has[SuspicionTimeout], Unit] =
     ZSTM.accessM[Has[SuspicionTimeout]](_.get.cancelTimeout(node))
 
-  private case class SuspicionTimeoutEntry(
+  final case class SuspicionTimeoutEntry(
     queue: TQueue[TimeoutCmd]
   )
 

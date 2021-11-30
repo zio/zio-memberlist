@@ -32,7 +32,7 @@ object udp {
                 .flatMap(buffer =>
                   server
                     .receive(buffer)
-                    .mapError(ExceptionWrapper)
+                    .mapError(ExceptionWrapper(_))
                     .zipLeft(buffer.flip)
                     .flatMap {
                       case Some(remoteAddr) =>
@@ -40,12 +40,13 @@ object udp {
                           new Channel(
                             bytes => buffer.getChunk(bytes),
                             chunk =>
-                              Buffer.byte(chunk).flatMap(server.send(_, remoteAddr)).mapError(ExceptionWrapper).unit,
+                              Buffer.byte(chunk).flatMap(server.send(_, remoteAddr)).mapError(ExceptionWrapper(_)).unit,
                             ZIO.succeed(true),
                             ZIO.unit
                           )
                         )
-                      case None             => ZIO.unit //this is situation when channel is configure for non blocking.
+                      case None             =>
+                        ZIO.unit //this is situation when channel is configure for non blocking.
                     }
                 )
                 .forever
@@ -65,7 +66,7 @@ object udp {
                           Chunk((size >>> 24).toByte, (size >>> 16).toByte, (size >>> 8).toByte, size.toByte) ++ data
                         )
                         .flatMap(server.send(_, addr))
-                        .mapError(ExceptionWrapper)
+                        .mapError(ExceptionWrapper(_))
                         .unit
                     }
                   )

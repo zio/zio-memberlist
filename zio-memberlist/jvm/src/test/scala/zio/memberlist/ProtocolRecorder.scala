@@ -51,10 +51,10 @@ object ProtocolRecorder {
       case Message.WithTimeout(message, action, timeout) =>
         consumeMessages(messageQueue, message, behaviorRef, protocol).unit *>
           action.delay(timeout).flatMap(consumeMessages(messageQueue, _, behaviorRef, protocol)).fork.unit
-      case md: Message.BestEffort[A]                     =>
+      case md: Message.BestEffort[A @unchecked]          =>
         messageQueue.offer(md) *>
           behaviorRef.get.flatMap { fn =>
-            ZIO.whenCase(fn.lift(md)) { case Some(d: Message.BestEffort[A]) =>
+            ZIO.whenCase(fn.lift(md)) { case Some(d: Message.BestEffort[A @unchecked]) =>
               protocol.onMessage(d)
             }
           }

@@ -65,13 +65,13 @@ object gens {
     Gen.oneOf(ping, ack, nack, pingReq, suspect, alive, dead)
 
   val swimJoin: Gen[Random with Sized, Initial.Join] =
-    nodeAddress.map(Initial.Join)
+    nodeAddress.map(Initial.Join(_))
 
   val swimAccept: Gen[Random with Sized, Initial.Accept.type] =
     Gen.const(Initial.Accept)
 
   val swimReject: Gen[Random with Sized, Initial.Reject] =
-    Gen.alphaNumericString.map(Initial.Reject)
+    Gen.alphaNumericString.map(Initial.Reject(_))
 
   val initialSwimlProtocol: Gen[Random with Sized, Initial] =
     Gen.oneOf(swimReject, swimAccept, swimJoin)

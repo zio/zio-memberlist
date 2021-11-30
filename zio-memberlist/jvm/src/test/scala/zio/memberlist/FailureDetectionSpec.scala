@@ -72,14 +72,14 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(100.seconds)
         messages <- recorder.collectN(3) { case Message.BestEffort(addr, _: Ping) => addr }
-      } yield assertTrue(messages.toSet == Set(node1.name, node2.name))
+      } yield assertTrue(messages == List(node1.name, node2.name))
     }.provideCustomLayer(testLayer),
     // The test is passing locally, but for some reasons in CircleCI it always
     // times out for 2.12 at JDK8, while the other versions eventually pass;
     // I will ignore it for now, but it needs to be addressed in the future.
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
-        recorder  <- ProtocolRecorder[messages.FailureDetection]()
+        recorder  <- ProtocolRecorder[messages.FailureDetection](PartialFunction.empty)
         _         <- Nodes.addNode(node1).commit
         _         <- TestClock.adjust(1500.milliseconds)
         messages  <- recorder.collectN(2) { case msg => msg }

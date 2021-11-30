@@ -11,21 +11,21 @@ sealed trait Message[+A] {
 
   final def transformM[B](fn: A => IO[Error, B]): IO[Error, Message[B]] =
     self match {
-      case msg: Message.BestEffort[A] =>
+      case msg: Message.BestEffort[A @unchecked] =>
         fn(msg.message).map(b => msg.copy(message = b))
-      case msg: Message.Broadcast[A]  =>
+      case msg: Message.Broadcast[A @unchecked]  =>
         fn(msg.message).map(b => msg.copy(message = b))
-      case msg: Message.Batch[A]      =>
+      case msg: Message.Batch[A @unchecked]      =>
         for {
           m1   <- msg.first.transformM(fn)
           m2   <- msg.second.transformM(fn)
           rest <- ZIO.foreach(msg.rest.toSeq)(_.transformM(fn))
         } yield Message.Batch(m1, m2, rest: _*)
-      case msg: WithTimeout[A]        =>
+      case msg: WithTimeout[A @unchecked]        =>
         msg.message
           .transformM(fn)
           .map(b => msg.copy(message = b, action = msg.action.flatMap(_.transformM(fn))))
-      case NoResponse                 =>
+      case NoResponse                            =>
         Message.noResponse
     }
 }

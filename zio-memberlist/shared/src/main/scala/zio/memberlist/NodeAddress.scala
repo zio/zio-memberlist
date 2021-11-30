@@ -19,7 +19,7 @@ final case class NodeAddress(ip: Chunk[Byte], port: Int) {
     (for {
       addr <- InetAddress.byAddress(ip)
       sa   <- InetSocketAddress.inetAddress(addr, port)
-    } yield sa).mapError(ExceptionWrapper)
+    } yield sa).mapError(ExceptionWrapper(_))
 
   override def toString: String = ip.mkString(".") + ": " + port
 }

@@ -37,7 +37,7 @@ class MessageSink(
         ZIO.foreach_(broadcast)(send) *>
           ZIO.foreach_(rest)(send)
       case msg @ Message.Broadcast(_)                    =>
-        broadcast.add(msg)
+        broadcast.add(msg.asInstanceOf[Message.Broadcast[Chunk[Byte]]])
       case Message.WithTimeout(message, action, timeout) =>
         send(message) *> action.delay(timeout).flatMap(send).unit
     }

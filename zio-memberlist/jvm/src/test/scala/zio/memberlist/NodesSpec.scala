@@ -52,7 +52,7 @@ object NodesSpec extends KeeperSpec {
         _    <- addNode(testNode1).commit
         _    <- addNode(testNode2).commit
         next <- ZIO.foreach(1 to 10)(_ => nextNode(Some(testNode2.name)).commit)
-      } yield assertTrue(next.flatten.toSet == Set((testNode1.name, testNode1)))
+      } yield assert(next.flatten)(hasSameElements(List((testNode1.name, testNode1))))
     },
     testM("should propagate events") {
       val testNode1 = Node(NodeName("test-node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)

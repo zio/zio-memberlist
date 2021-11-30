@@ -8,7 +8,6 @@ import zio.stream.ZStream
 import zio.test.Assertion.equalTo
 import zio.test.{Spec, TestFailure, TestSuccess, assert}
 
-
 object ProtocolSpec extends KeeperSpec {
 
   val protocolDefinition: ZIO[Any with Any, Error, Protocol[PingPong]] = Protocol[PingPong].make(

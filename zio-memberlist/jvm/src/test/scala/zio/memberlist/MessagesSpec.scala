@@ -42,23 +42,15 @@ object MessagesSpec extends KeeperSpec {
         messages.use { case (testTransport, messages) =>
           for {
             dl       <- protocol
-            _        <- zio.console.putStrLn("111")
             _        <- Nodes.addNode(testNode).commit
-            _        <- zio.console.putStrLn("222")
             _        <- messages.process(dl.binary)
-            _        <- zio.console.putStrLn("333")
             ping1    <- ByteCodec[PingPong].toChunk(PingPong.Ping(123))
-            _        <- zio.console.putStrLn("444")
             ping2    <- ByteCodec[PingPong].toChunk(PingPong.Ping(321))
-            _        <- zio.console.putStrLn("555")
             _        <- testTransport.incommingMessage(WithPiggyback(testNode.name, ping1, List.empty))
             _        <- testTransport.incommingMessage(WithPiggyback(testNode.name, ping2, List.empty))
-            _        <- zio.console.putStrLn("666")
             messages <- testTransport.outgoingMessages.mapM { case WithPiggyback(_, chunk, _) =>
                           ByteCodec.decode[PingPong](chunk)
                         }.take(2).runCollect
-
-            _ <- zio.console.putStrLn("777")
           } yield assert(messages)(hasSameElements(List(PingPong.Pong(123), PingPong.Pong(321))))
         }
       },

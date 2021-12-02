@@ -21,7 +21,6 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
         val read          = (size: Int) => {
           val bytes = chunkWithSize.take(size)
           chunkWithSize = chunkWithSize.drop(size)
-          println("receive message")
           ZIO.succeedNow(bytes)
         }
         connectionHandler(new Channel(read, _ => ZIO.unit, ZIO.succeed(true), ZIO.unit))
@@ -36,10 +35,7 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
           (_, chunk) =>
             ByteCodec[WithPiggyback]
               .fromChunk(chunk)
-              .flatMap { aaa =>
-                println(aaa)
-                out.offer(aaa)
-              }
+              .flatMap (out.offer(_))
               .ignore
         )
       )

@@ -53,7 +53,6 @@ class MessageSink(
       )
     ZStream
       .fromQueue(messages)
-      .tap(t => ZIO.effectTotal(println(" " + t + " take")))
       .mapMPar(10) {
         case Take(Exit.Failure(cause)) =>
           log.error("error during processing messages.", cause)

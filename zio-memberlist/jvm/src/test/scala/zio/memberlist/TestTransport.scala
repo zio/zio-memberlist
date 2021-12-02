@@ -7,7 +7,7 @@ import zio.memberlist.transport.{Bind, Channel, ConnectionLessTransport}
 import zio.nio.core.SocketAddress
 import zio.stream._
 
-class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends ConnectionLessTransport.Service {
+class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends ConnectionLessTransport {
 
   override def bind(
     localAddr: SocketAddress
@@ -32,7 +32,11 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
           in.isShutdown,
           in.shutdown,
           ZIO.succeed(localAddr),
-          (_, chunk) => ByteCodec[WithPiggyback].fromChunk(chunk).flatMap(out.offer).ignore
+          (_, chunk) =>
+            ByteCodec[WithPiggyback]
+              .fromChunk(chunk)
+              .flatMap(out.offer(_))
+              .ignore
         )
       )
       .toManaged(_.close.ignore)
@@ -46,8 +50,8 @@ object TestTransport {
 
   def make: UManaged[TestTransport] =
     for {
-      in  <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)
-      out <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)
+      in  <- Queue.unbounded[WithPiggyback].toManaged(_.shutdown)
+      out <- Queue.unbounded[WithPiggyback].toManaged(_.shutdown)
     } yield new TestTransport(in, out)
 
 }

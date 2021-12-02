@@ -1,9 +1,9 @@
 package zio.memberlist
 
-import upickle.default.{macroRW, _}
+import upickle.default._
 import zio.memberlist.GossipState.StateDiff
 
-final case class GossipState(members: Vector[NodeAddress]) extends AnyVal {
+final case class GossipState(members: Vector[NodeAddress]) {
 
   def addMember(member: NodeAddress): GossipState =
     copy(members = this.members :+ member)
@@ -27,5 +27,6 @@ object GossipState {
   val Empty: GossipState = GossipState(Vector.empty[NodeAddress])
 
   implicit val gossipStateRw: ReadWriter[GossipState] = macroRW[GossipState]
+
   final case class StateDiff(local: Vector[NodeAddress], remote: Vector[NodeAddress])
 }

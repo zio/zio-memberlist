@@ -3,6 +3,7 @@ package zio.memberlist.example
 import upickle.default.macroRW
 import zio.clock.Clock
 import zio.config.getConfig
+import zio.console.Console
 import zio.duration._
 import zio.logging.{Logging, log}
 import zio.memberlist._
@@ -29,7 +30,7 @@ object TestNode extends zio.App {
 
   import ChaosMonkey._
 
-  val discovery: ZLayer[Has[MemberlistConfig] with Logging, Nothing, Has[Discovery.Service]] =
+  val discovery: ZLayer[Has[MemberlistConfig] with Logging, Nothing, Has[Discovery]] =
     ZLayer.fromManaged(
       for {
         appConfig  <- getConfig[MemberlistConfig].toManaged_
@@ -41,9 +42,9 @@ object TestNode extends zio.App {
       } yield discovery
     )
 
-  val dependencies: ZLayer[zio.console.Console with Clock with zio.system.System with Any, Error, Logging with Has[
+  val dependencies: ZLayer[Console with Clock with zio.system.System, Error, Logging with Has[
     MemberlistConfig
-  ] with Has[Discovery.Service] with Clock with Memberlist[ChaosMonkey]] = {
+  ] with Has[Discovery] with Clock with Memberlist[ChaosMonkey]] = {
     val config  = MemberlistConfig.fromEnv.orDie
     val logging = Logging.console()
     val seeds   = (logging ++ config) >+> discovery

@@ -1,6 +1,6 @@
 package zio.memberlist
 
-import upickle.default.macroRW
+import upickle.default._
 import zio.memberlist.encoding.ByteCodec
 
 sealed trait PingPong

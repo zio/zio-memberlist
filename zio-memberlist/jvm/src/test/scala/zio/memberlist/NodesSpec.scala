@@ -4,7 +4,7 @@ import zio._
 import zio.clock._
 import zio.logging._
 import zio.memberlist.state.Nodes._
-import zio.memberlist.state.{NodeState, _}
+import zio.memberlist.state._
 import zio.stm.ZSTM
 import zio.stream.ZStream
 import zio.test.Assertion._
@@ -27,13 +27,15 @@ object NodesSpec extends KeeperSpec {
         _         <- ZSTM.foreach_(Chunk(aliveNode, suspectNode, deadNode, leftNode))(addNode).commit
         fiveCalls <- ZStream.repeatEffect(nextNode().commit).take(5).runCollect
       } yield assert(next0)(isNone) &&
-        assertTrue(
-          fiveCalls == Chunk(
-            Some((aliveNode.name, aliveNode)),
-            Some((suspectNode.name, suspectNode)),
-            Some((aliveNode.name, aliveNode)),
-            Some((suspectNode.name, suspectNode)),
-            Some((aliveNode.name, aliveNode))
+        assert(fiveCalls)(
+          hasSameElementsDistinct(
+            Chunk(
+              Some((aliveNode.name, aliveNode)),
+              Some((suspectNode.name, suspectNode)),
+              Some((aliveNode.name, aliveNode)),
+              Some((suspectNode.name, suspectNode)),
+              Some((aliveNode.name, aliveNode))
+            )
           )
         )
     },
@@ -43,7 +45,7 @@ object NodesSpec extends KeeperSpec {
         _    <- addNode(testNode).commit
         _    <- addNode(testNode).commit
         next <- nextNode().commit
-      } yield assertTrue(next.get == (testNode.name, testNode))
+      } yield assertTrue(next.get == Tuple2(testNode.name, testNode))
     },
     testM("exclude node") {
       val testNode1 = Node(NodeName("test-node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
@@ -52,7 +54,7 @@ object NodesSpec extends KeeperSpec {
         _    <- addNode(testNode1).commit
         _    <- addNode(testNode2).commit
         next <- ZIO.foreach(1 to 10)(_ => nextNode(Some(testNode2.name)).commit)
-      } yield assertTrue(next.flatten.toSet == Set((testNode1.name, testNode1)))
+      } yield assert(next.flatten)(hasSameElementsDistinct(List((testNode1.name, testNode1))))
     },
     testM("should propagate events") {
       val testNode1 = Node(NodeName("test-node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)

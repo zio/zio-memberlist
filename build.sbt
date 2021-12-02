@@ -1,5 +1,7 @@
 import BuildHelper._
 
+Global / onChangedBuildSource := ReloadOnSourceChanges
+
 inThisBuild(
   List(
     organization := "dev.zio",
@@ -7,10 +9,7 @@ inThisBuild(
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer("pshemass", "Przemyslaw Wierzbicki", "rzbikson@gmail.com", url("https://github.com/pshemass"))
-    ),
-    pgpPassphrase := sys.env.get("PGP_PASSWORD").map(_.toArray),
-    pgpPublicRing := file("/tmp/public.asc"),
-    pgpSecretRing := file("/tmp/secret.asc")
+    )
   )
 )
 
@@ -31,9 +30,9 @@ addCommandAlias(
   ";zioMemberlistNative/test:compile"
 )
 
-val zioVersion        = "1.0.9"
+val zioVersion        = "1.0.11"
 val zioNioVersion     = "1.0.0-RC11"
-val zioLoggingVersion = "0.5.4"
+val zioLoggingVersion = "0.5.14"
 val zioConfigVersion  = "1.0.10"
 
 lazy val root = project
@@ -59,11 +58,12 @@ lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     libraryDependencies ++= Seq(
       "dev.zio"                %% "zio"                     % zioVersion,
       "dev.zio"                %% "zio-streams"             % zioVersion,
-      "dev.zio"                %% "zio-nio"                 % zioNioVersion,
+      ("dev.zio"               %% "zio-nio"                 % zioNioVersion).exclude("org.scala-lang.modules", "scala-collection-compat_2.13"),
       "dev.zio"                %% "zio-logging"             % zioLoggingVersion,
       "dev.zio"                %% "zio-config"              % zioConfigVersion,
-      "com.lihaoyi"            %% "upickle"                 % "1.2.0",
-      "org.scala-lang.modules" %% "scala-collection-compat" % "2.1.6",
+      "com.lihaoyi"            %% "upickle"                 % "1.4.2",
+      "org.scala-lang.modules" %% "scala-collection-compat" % "2.5.0",
+      "dev.zio"                %% "izumi-reflect"           % "2.0.8",
       "dev.zio"                %% "zio"                     % zioVersion,
       "dev.zio"                %% "zio-test"                % zioVersion % Test,
       "dev.zio"                %% "zio-test-sbt"            % zioVersion % Test

@@ -23,7 +23,7 @@ object BuildHelper {
   val Scala211: String   = versions("2.11")
   val Scala212: String   = versions("2.12")
   val Scala213: String   = versions("2.13")
-  val ScalaDotty: String = versions("3.0")
+  val ScalaDotty: String = versions("3.1")
 
   val SilencerVersion = "1.7.7"
 
@@ -98,7 +98,7 @@ object BuildHelper {
   )
 
   val scalaReflectSettings = Seq(
-    libraryDependencies ++= Seq("dev.zio" %%% "izumi-reflect" % "1.0.0-M10")
+    libraryDependencies ++= Seq("dev.zio" %%% "izumi-reflect" % "1.1.3")
   )
 
   // Keep this consistent with the version in .core-tests/shared/src/test/scala/REPLSpec.scala

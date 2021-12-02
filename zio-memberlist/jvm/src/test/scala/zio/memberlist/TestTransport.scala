@@ -21,6 +21,7 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
         val read          = (size: Int) => {
           val bytes = chunkWithSize.take(size)
           chunkWithSize = chunkWithSize.drop(size)
+          println("receive message")
           ZIO.succeedNow(bytes)
         }
         connectionHandler(new Channel(read, _ => ZIO.unit, ZIO.succeed(true), ZIO.unit))
@@ -32,7 +33,14 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
           in.isShutdown,
           in.shutdown,
           ZIO.succeed(localAddr),
-          (_, chunk) => ByteCodec[WithPiggyback].fromChunk(chunk).flatMap(out.offer).ignore
+          (_, chunk) =>
+            ByteCodec[WithPiggyback]
+              .fromChunk(chunk)
+              .flatMap { aaa =>
+                println(aaa)
+                out.offer(aaa)
+              }
+              .ignore
         )
       )
       .toManaged(_.close.ignore)
@@ -46,8 +54,8 @@ object TestTransport {
 
   def make: UManaged[TestTransport] =
     for {
-      in  <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)
-      out <- Queue.bounded[WithPiggyback](100).toManaged(_.shutdown)
+      in  <- Queue.unbounded[WithPiggyback].toManaged(_.shutdown)
+      out <- Queue.unbounded[WithPiggyback].toManaged(_.shutdown)
     } yield new TestTransport(in, out)
 
 }

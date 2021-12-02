@@ -6,32 +6,31 @@ import zio.logging.Logging
 import zio.memberlist.state.Nodes
 import zio.stream.ZStream
 
-object ProtocolRecorder {
-  type ProtocolRecorder[A] = Has[ProtocolRecorder.Service[A]]
+trait ProtocolRecorder[A] {
+  def withBehavior(pf: PartialFunction[Message.BestEffort[A], Message[A]]): UIO[ProtocolRecorder[A]]
+  def collectN[B](n: Long)(pr: PartialFunction[Message[A], B]): UIO[List[B]]
+  def send(msg: Message.BestEffort[A]): IO[zio.memberlist.Error, Message[A]]
+}
 
-  trait Service[A] {
-    def withBehavior(pf: PartialFunction[Message.BestEffort[A], Message[A]]): UIO[Service[A]]
-    def collectN[B](n: Long)(pr: PartialFunction[Message[A], B]): UIO[List[B]]
-    def send(msg: Message.BestEffort[A]): IO[zio.memberlist.Error, Message[A]]
-  }
+object ProtocolRecorder {
 
   def apply[A: Tag](
     pf: PartialFunction[Message.BestEffort[A], Message[A]] = PartialFunction.empty
-  ): ZIO[ProtocolRecorder[A], Nothing, Service[A]] =
-    ZIO.accessM[ProtocolRecorder[A]](recorder => recorder.get.withBehavior(pf))
+  ): ZIO[Has[ProtocolRecorder[A]], Nothing, ProtocolRecorder[A]] =
+    ZIO.accessM[Has[ProtocolRecorder[A]]](recorder => recorder.get.withBehavior(pf))
 
   def make[R, E, A: Tag](
     protocolFactory: ZIO[R, E, Protocol[A]]
-  ): ZLayer[Clock with Logging with Has[Nodes] with R, E, ProtocolRecorder[A]] =
+  ): ZLayer[Clock with Logging with Has[Nodes] with R, E, Has[ProtocolRecorder[A]]] =
     (for {
       behaviorRef  <- Ref.make[PartialFunction[Message.BestEffort[A], Message[A]]](PartialFunction.empty)
       protocol     <- protocolFactory
       messageQueue <- ZQueue.bounded[Message[A]](100)
       _            <- protocol.produceMessages.foreach(consumeMessages(messageQueue, _, behaviorRef, protocol)).fork
       stream        = ZStream.fromQueue(messageQueue)
-    } yield new Service[A] {
+    } yield new ProtocolRecorder[A] {
 
-      override def withBehavior(pf: PartialFunction[Message.BestEffort[A], Message[A]]): UIO[Service[A]] =
+      override def withBehavior(pf: PartialFunction[Message.BestEffort[A], Message[A]]): UIO[ProtocolRecorder[A]] =
         behaviorRef.set(pf).as(this)
 
       override def collectN[B](n: Long)(pf: PartialFunction[Message[A], B]): UIO[List[B]] =

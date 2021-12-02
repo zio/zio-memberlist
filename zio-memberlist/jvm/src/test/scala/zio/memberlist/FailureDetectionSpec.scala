@@ -8,7 +8,7 @@ import zio.logging._
 import zio.memberlist.protocols.messages.FailureDetection._
 import zio.memberlist.protocols.{FailureDetection, messages}
 import zio.memberlist.state._
-import zio.test.Assertion.equalTo
+import zio.test.Assertion.{equalTo, hasSameElementsDistinct}
 import zio.test.TestAspect.ignore
 import zio.test._
 import zio.test.environment.{TestClock, TestEnvironment}
@@ -37,9 +37,8 @@ object FailureDetectionSpec extends KeeperSpec {
   ) >+> zio.memberlist.state.Nodes
     .live(NodeName("test-node")) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
 
-  val recorder: ZLayer[Clock with Logging with FailureDetection.Env, Nothing, ProtocolRecorder.ProtocolRecorder[
-    messages.FailureDetection
-  ]] =
+  val recorder
+    : ZLayer[Clock with Logging with FailureDetection.Env, Nothing, Has[ProtocolRecorder[messages.FailureDetection]]] =
     ProtocolRecorder
       .make(
         FailureDetection
@@ -53,9 +52,9 @@ object FailureDetectionSpec extends KeeperSpec {
     Nothing,
     Console with Clock with Logging with Has[IncarnationSequence] with Has[MessageSequenceNo] with Has[
       MessageAcknowledge
-    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout] with ProtocolRecorder.ProtocolRecorder[
+    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout] with Has[ProtocolRecorder[
       messages.FailureDetection
-    ]
+    ]]
   ] = nodesLayer >+> recorder
 
   val node1: Node = Node(NodeName("node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
@@ -72,7 +71,7 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(100.seconds)
         messages <- recorder.collectN(3) { case Message.BestEffort(addr, _: Ping) => addr }
-      } yield assertTrue(messages == List(node1.name, node2.name))
+      } yield assert(messages)(hasSameElementsDistinct(List(node1.name, node2.name)))
     }.provideCustomLayer(testLayer),
     // The test is passing locally, but for some reasons in CircleCI it always
     // times out for 2.12 at JDK8, while the other versions eventually pass;

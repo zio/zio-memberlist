@@ -53,16 +53,17 @@ class MessageSink(
       )
     ZStream
       .fromQueue(messages)
-      .collectM { case Take(Exit.Success(msgs)) =>
-        ZIO.foreach(msgs) {
-          case msg: Message.BestEffort[Chunk[Byte]] =>
-            Take.fromEffect(protocol.onMessage(msg))
-          case _                                    =>
-            ZIO.dieMessage("Something went horribly wrong.")
-        }
-      }
-      .mapMPar(10) { msgs =>
-        ZIO.foreach_(msgs)(processTake)
+      .tap(t => ZIO.effectTotal(println(" " + t + " take")))
+      .mapMPar(10) {
+        case Take(Exit.Failure(cause)) =>
+          log.error("error during processing messages.", cause)
+        case Take(Exit.Success(msgs))  =>
+          ZIO.foreach(msgs) {
+            case msg: Message.BestEffort[Chunk[Byte]] =>
+              Take.fromEffect(protocol.onMessage(msg)).flatMap(processTake(_))
+            case _                                    =>
+              ZIO.dieMessage("Something went horribly wrong.")
+          }
       }
       .runDrain
       .fork *>

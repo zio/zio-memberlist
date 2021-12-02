@@ -1,27 +1,25 @@
 package zio.memberlist
 
 import zio.stm.{TRef, URSTM, USTM, ZSTM}
-import zio.{ULayer, ZLayer}
+import zio.{Has, ULayer}
 
+trait MessageSequenceNo  {
+  val next: USTM[Long]
+}
 object MessageSequenceNo {
 
-  trait Service {
-    val next: USTM[Long]
-  }
+  val next: URSTM[Has[MessageSequenceNo], Long] =
+    ZSTM.accessM[Has[MessageSequenceNo]](_.get.next)
 
-  val next: URSTM[MessageSequence, Long] =
-    ZSTM.accessM[MessageSequence](_.get.next)
+  def live: ULayer[Has[MessageSequenceNo]] =
+    TRef
+      .makeCommit[Long](0)
+      .map(ref =>
+        new MessageSequenceNo {
 
-  def live: ULayer[MessageSequence] =
-    ZLayer.fromEffect(
-      TRef
-        .makeCommit[Long](0)
-        .map(ref =>
-          new MessageSequenceNo.Service {
-
-            override val next: USTM[Long] =
-              ref.updateAndGet(_ + 1)
-          }
-        )
-    )
+          override val next: USTM[Long] =
+            ref.updateAndGet(_ + 1)
+        }
+      )
+      .toLayer
 }

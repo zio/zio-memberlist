@@ -27,7 +27,7 @@ final class Channel(
                   .flatMap(c =>
                     ZIO
                       .effect(new BigInteger(c.toArray).intValue())
-                      .mapError(ExceptionWrapper)
+                      .mapError(ExceptionWrapper(_))
                   )
       data   <- read0(length)
     } yield data

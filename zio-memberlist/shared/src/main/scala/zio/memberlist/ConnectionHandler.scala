@@ -37,7 +37,7 @@ object ConnectionHandler {
 
   def bind(
     local: NodeAddress,
-    transport: ConnectionLessTransport.Service,
+    transport: ConnectionLessTransport,
     messages: Queue[Take[Error, Message[Chunk[Byte]]]]
   ): ZManaged[Logging, TransportError, Bind] =
     for {

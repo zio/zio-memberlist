@@ -3,7 +3,7 @@ package zio.memberlist.discovery
 import zio.duration.Duration
 import zio.logging.Logger
 import zio.memberlist.{Error, ServiceDiscoveryError}
-import zio.nio.core.{InetAddress, InetSocketAddress, SocketAddress}
+import zio.nio.core.{InetAddress, InetSocketAddress}
 import zio.{IO, UIO, ZIO}
 
 import java.net.UnknownHostException
@@ -16,7 +16,7 @@ private class K8DnsDiscovery(
   serviceDns: InetAddress,
   serviceDnsTimeout: Duration,
   servicePort: Int
-) extends Discovery.Service {
+) extends Discovery {
 
   final override val discoverNodes: IO[Error, Set[InetSocketAddress]] = {
     for {

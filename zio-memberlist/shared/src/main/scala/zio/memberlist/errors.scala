@@ -6,7 +6,8 @@ import zio.nio.core.SocketAddress
 
 sealed abstract class Error(val msg: String = "", val cause: Throwable = null) extends Exception(msg, cause)
 
-sealed abstract class SerializationError(msg: String = "") extends Error(msg = msg)
+sealed abstract class SerializationError(msg: String = "", cause: Throwable = null)
+    extends Error(msg = msg, cause = cause)
 
 object SerializationError {
 
@@ -21,15 +22,16 @@ object SerializationError {
       SerializationTypeError(s"Cannot serialize because of ${cause.getMessage}")
   }
 
-  final case class DeserializationTypeError(msg0: String)
+  final case class DeserializationTypeError(msg0: String, cause0: Throwable = null)
       extends SerializationError(
-        msg = msg0
+        msg = msg0,
+        cause = cause0
       )
 
   object DeserializationTypeError {
 
     def apply(cause: Throwable): DeserializationTypeError =
-      new DeserializationTypeError(s"Cannot deserialize because of ${cause.getMessage}")
+      new DeserializationTypeError(s"Cannot deserialize because of ${cause.getMessage}", cause)
   }
 
 }

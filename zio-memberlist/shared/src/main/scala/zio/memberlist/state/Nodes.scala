@@ -10,97 +10,97 @@ import zio.stm._
 import zio.stream.{Stream, ZStream}
 import zio.{Has, ZIO, ZLayer}
 
-object Nodes {
+/**
+ * Nodes maintains state of the cluster.
+ */
+trait Nodes {
+  def addNode(node: Node): USTM[Unit]
 
   /**
-   * Nodes maintains state of the cluster.
+   * Changes node state and issue membership event.
+   * @param id - node name
+   * @param newState - new state
    */
-  trait Service {
-    def addNode(node: Node): USTM[Unit]
+  def changeNodeState(id: NodeName, newState: NodeState): STM[Error, Unit]
 
-    /**
-     * Changes node state and issue membership event.
-     * @param id - node name
-     * @param newState - new state
-     */
-    def changeNodeState(id: NodeName, newState: NodeState): STM[Error, Unit]
+  /**
+   * close connection and remove Node from cluster.
+   * @param id node name
+   */
+  def disconnect(id: NodeName): STM[Error, Unit]
 
-    /**
-     * close connection and remove Node from cluster.
-     * @param id node name
-     */
-    def disconnect(id: NodeName): STM[Error, Unit]
+  /**
+   *  Stream of Membership Events
+   */
+  def events: Stream[Nothing, MembershipEvent]
 
-    /**
-     *  Stream of Membership Events
-     */
-    def events: Stream[Nothing, MembershipEvent]
+  val localNodeName: NodeName
 
-    val localNodeName: NodeName
+  /**
+   * Returns next node.
+   */
+  def next(exclude: Option[NodeName]): USTM[Option[(NodeName, Node)]]
 
-    /**
-     * Returns next node.
-     */
-    def next(exclude: Option[NodeName]): USTM[Option[(NodeName, Node)]]
+  /**
+   * Node state for given name.
+   */
+  def nodeState(id: NodeName): STM[Error, NodeState]
 
-    /**
-     * Node state for given name.
-     */
-    def nodeState(id: NodeName): STM[Error, NodeState]
+  /**
+   * Node Address for given name.
+   */
+  def nodeAddress(id: NodeName): STM[Error, NodeAddress]
 
-    /**
-     * Node Address for given name.
-     */
-    def nodeAddress(id: NodeName): STM[Error, NodeAddress]
+  val numberOfNodes: USTM[Int]
 
-    val numberOfNodes: USTM[Int]
+  /**
+   * Lists members that are in healthy state.
+   */
+  def healthyNodes: USTM[List[(NodeName, Node)]]
 
-    /**
-     * Lists members that are in healthy state.
-     */
-    def healthyNodes: USTM[List[(NodeName, Node)]]
+  /**
+   * Returns string with cluster state.
+   */
+  val prettyPrint: USTM[String]
+}
 
-    /**
-     * Returns string with cluster state.
-     */
-    val prettyPrint: USTM[String]
-  }
+object Nodes {
 
-  def addNode(node: Node): ZSTM[zio.memberlist.Nodes, Nothing, Unit] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.addNode(node))
+  def addNode(node: Node): ZSTM[Has[Nodes], Nothing, Unit] =
+    ZSTM.accessM[Has[Nodes]](_.get.addNode(node))
 
-  val localNodeName: URSTM[zio.memberlist.Nodes, NodeName] =
-    ZSTM.access[zio.memberlist.Nodes](_.get.localNodeName)
+  val localNodeName: URSTM[Has[Nodes], NodeName] =
+    ZSTM.access[Has[Nodes]](_.get.localNodeName)
 
-  def nextNode(exclude: Option[NodeName] = None): URSTM[zio.memberlist.Nodes, Option[(NodeName, Node)]] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.next(exclude))
+  def nextNode(exclude: Option[NodeName] = None): URSTM[Has[Nodes], Option[(NodeName, Node)]] =
+    ZSTM.accessM[Has[Nodes]](_.get.next(exclude))
 
-  def nodeState(id: NodeName): ZSTM[zio.memberlist.Nodes, Error, NodeState] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.nodeState(id))
+  def nodeState(id: NodeName): ZSTM[Has[Nodes], Error, NodeState] =
+    ZSTM.accessM[Has[Nodes]](_.get.nodeState(id))
 
-  def nodeAddress(id: NodeName): ZSTM[zio.memberlist.Nodes, Error, NodeAddress] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.nodeAddress(id))
+  def nodeAddress(id: NodeName): ZSTM[Has[Nodes], Error, NodeAddress] =
+    ZSTM.accessM[Has[Nodes]](_.get.nodeAddress(id))
 
-  def changeNodeState(id: NodeName, newState: NodeState): ZSTM[zio.memberlist.Nodes, Error, Unit] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.changeNodeState(id, newState))
+  def changeNodeState(id: NodeName, newState: NodeState): ZSTM[Has[Nodes], Error, Unit] =
+    ZSTM.accessM[Has[Nodes]](_.get.changeNodeState(id, newState))
 
-  def disconnect(id: NodeName): ZSTM[zio.memberlist.Nodes, Error, Unit] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.disconnect(id))
+  def disconnect(id: NodeName): ZSTM[Has[Nodes], Error, Unit] =
+    ZSTM.accessM[Has[Nodes]](_.get.disconnect(id))
 
-  val prettyPrint: URSTM[zio.memberlist.Nodes, String] =
-    ZSTM.accessM[zio.memberlist.Nodes](_.get.prettyPrint)
+  val prettyPrint: URSTM[Has[Nodes], String] =
+    ZSTM.accessM[Has[Nodes]](_.get.prettyPrint)
 
-  def events: ZStream[zio.memberlist.Nodes, Nothing, MembershipEvent] =
-    ZStream.accessStream[zio.memberlist.Nodes](_.get.events)
+  def events: ZStream[Has[Nodes], Nothing, MembershipEvent] =
+    ZStream.accessStream[Has[Nodes]](_.get.events)
 
   final case class NodeStateChanged(node: Node, oldState: NodeState, newState: NodeState)
 
-  def live0(localNode0: NodeName): ZIO[Logging with Clock, Nothing, zio.memberlist.state.Nodes.Service] =
+  def live0(localNode0: NodeName): ZIO[Logging with Clock, Nothing, Nodes] =
     for {
       nodeStates       <- TMap.empty[NodeName, Node].commit
       eventsQueue      <- TQueue.bounded[MembershipEvent](1000).commit
       roundRobinOffset <- TRef.make(0).commit
-    } yield new Nodes.Service {
+    } yield new Nodes {
 
       def addNode(node: Node): USTM[Unit] =
         nodeStates
@@ -174,10 +174,10 @@ object Nodes {
         )
     }
 
-  def live(localNode0: NodeName): ZLayer[Logging with Clock, Nothing, zio.memberlist.Nodes] =
+  def live(localNode0: NodeName): ZLayer[Logging with Clock, Nothing, Has[Nodes]] =
     live0(localNode0).toLayer
 
-  val liveWithConfig: ZLayer[Logging with Clock with Has[MemberlistConfig], Nothing, zio.memberlist.Nodes] =
+  val liveWithConfig: ZLayer[Logging with Clock with Has[MemberlistConfig], Nothing, Has[Nodes]] =
     (for {
       localConfig <- getConfig[MemberlistConfig]
       nodes       <- live0(localConfig.name)

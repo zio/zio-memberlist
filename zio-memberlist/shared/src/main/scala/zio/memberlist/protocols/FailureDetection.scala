@@ -6,21 +6,21 @@ import zio.logging._
 import zio.memberlist._
 import zio.memberlist.protocols.messages.FailureDetection._
 import zio.memberlist.state.Nodes._
-import zio.memberlist.state.{NodeName, NodeState}
+import zio.memberlist.state.{NodeName, NodeState, Nodes}
 import zio.stm.{STM, TMap, ZSTM}
 import zio.stream.ZStream
-import zio.{Schedule, ZIO}
+import zio.{Has, Schedule, ZIO}
 
 object FailureDetection {
 
-  type Env = LocalHealthMultiplier
-    with MessageSequence
-    with IncarnationSequence
-    with Nodes
+  type Env = Has[LocalHealthMultiplier]
+    with Has[MessageSequenceNo]
+    with Has[IncarnationSequence]
+    with Has[Nodes]
     with Logging
-    with MessageAcknowledge
+    with Has[MessageAcknowledge]
     with Clock
-    with SuspicionTimeout
+    with Has[SuspicionTimeout]
 
   def protocol(
     protocolPeriod: Duration,
@@ -161,7 +161,9 @@ object FailureDetection {
     localNode: NodeName,
     protocolTimeout: Duration
   ): ZIO[
-    LocalHealthMultiplier with Nodes with Logging with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
+    Has[LocalHealthMultiplier] with Has[Nodes] with Logging with Has[MessageAcknowledge] with Has[
+      SuspicionTimeout
+    ] with Has[IncarnationSequence],
     Error,
     Message[messages.FailureDetection]
   ] =
@@ -195,7 +197,9 @@ object FailureDetection {
     probedNode: NodeName,
     localNode: NodeName
   ): ZIO[
-    Nodes with LocalHealthMultiplier with MessageAcknowledge with SuspicionTimeout with IncarnationSequence,
+    Has[Nodes] with Has[LocalHealthMultiplier] with Has[MessageAcknowledge] with Has[SuspicionTimeout] with Has[
+      IncarnationSequence
+    ],
     Error,
     Message[messages.FailureDetection]
   ] =
@@ -207,7 +211,7 @@ object FailureDetection {
             .whenM(MessageAcknowledge.isCompleted(Nack(seqNo)).map(!_)) *>
           changeNodeState(probedNode, NodeState.Suspect) *>
           IncarnationSequence.current.flatMap(currentIncarnation =>
-            Message.withTimeout[SuspicionTimeout, messages.FailureDetection](
+            Message.withTimeout[Has[SuspicionTimeout], messages.FailureDetection](
               Message.Broadcast(Suspect(currentIncarnation, localNode, probedNode)),
               SuspicionTimeout
                 .registerTimeout(probedNode)

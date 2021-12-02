@@ -31,7 +31,7 @@ class MessageSink(
           nodeAddress  <- Nodes.nodeAddress(nodeAddress).commit.flatMap(_.socketAddress)
           _            <- sendBestEffort(nodeAddress, chunk)
         } yield ()
-      case msg: Message.Batch[Chunk[Byte]]               =>
+      case msg: Message.Batch[Chunk[Byte] @unchecked]    =>
         val (broadcast, rest) =
           (msg.first :: msg.second :: msg.rest.toList).partition(_.isInstanceOf[Message.Broadcast[_]])
         ZIO.foreach_(broadcast)(send) *>
@@ -58,9 +58,9 @@ class MessageSink(
           log.error("error during processing messages.", cause)
         case Take(Exit.Success(msgs))  =>
           ZIO.foreach(msgs) {
-            case msg: Message.BestEffort[Chunk[Byte]] =>
+            case msg: Message.BestEffort[Chunk[Byte] @unchecked] =>
               Take.fromEffect(protocol.onMessage(msg)).flatMap(processTake(_))
-            case _                                    =>
+            case _                                               =>
               ZIO.dieMessage("Something went horribly wrong.")
           }
       }

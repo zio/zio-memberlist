@@ -35,7 +35,7 @@ class TestTransport(in: Queue[WithPiggyback], out: Queue[WithPiggyback]) extends
           (_, chunk) =>
             ByteCodec[WithPiggyback]
               .fromChunk(chunk)
-              .flatMap (out.offer(_))
+              .flatMap(out.offer(_))
               .ignore
         )
       )

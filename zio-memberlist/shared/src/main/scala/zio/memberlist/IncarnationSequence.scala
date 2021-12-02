@@ -1,41 +1,40 @@
 package zio.memberlist
 
 import zio.stm.{TRef, URSTM, USTM, ZSTM}
-import zio.{ULayer, ZLayer}
+import zio.{Has, ULayer}
+
+trait IncarnationSequence {
+  val current: USTM[Long]
+  val next: USTM[Long]
+  def nextAfter(i: Long): USTM[Long]
+}
 
 object IncarnationSequence {
 
-  trait Service {
-    val current: USTM[Long]
-    val next: USTM[Long]
-    def nextAfter(i: Long): USTM[Long]
-  }
+  val current: URSTM[Has[IncarnationSequence], Long] =
+    ZSTM.accessM[Has[IncarnationSequence]](_.get.current)
 
-  val current: URSTM[IncarnationSequence, Long] =
-    ZSTM.accessM[IncarnationSequence](_.get.current)
+  val next: URSTM[Has[IncarnationSequence], Long] =
+    ZSTM.accessM[Has[IncarnationSequence]](_.get.next)
 
-  val next: URSTM[IncarnationSequence, Long] =
-    ZSTM.accessM[IncarnationSequence](_.get.next)
+  def nextAfter(i: Long): URSTM[Has[IncarnationSequence], Long] =
+    ZSTM.accessM[Has[IncarnationSequence]](_.get.nextAfter(i))
 
-  def nextAfter(i: Long): URSTM[IncarnationSequence, Long] =
-    ZSTM.accessM[IncarnationSequence](_.get.nextAfter(i))
+  def live: ULayer[Has[IncarnationSequence]] =
+    TRef
+      .makeCommit[Long](0)
+      .map(ref =>
+        new IncarnationSequence {
 
-  def live: ULayer[IncarnationSequence] =
-    ZLayer.fromEffect(
-      TRef
-        .makeCommit[Long](0)
-        .map(ref =>
-          new IncarnationSequence.Service {
+          override val current: zio.stm.USTM[Long] =
+            ref.get
 
-            override val current: zio.stm.USTM[Long] =
-              ref.get
+          override val next: USTM[Long] =
+            ref.updateAndGet(_ + 1)
 
-            override val next: USTM[Long] =
-              ref.updateAndGet(_ + 1)
-
-            override def nextAfter(i: Long): USTM[Long] =
-              ref.updateAndGet(_ => i + 1)
-          }
-        )
-    )
+          override def nextAfter(i: Long): USTM[Long] =
+            ref.updateAndGet(_ => i + 1)
+        }
+      )
+      .toLayer
 }

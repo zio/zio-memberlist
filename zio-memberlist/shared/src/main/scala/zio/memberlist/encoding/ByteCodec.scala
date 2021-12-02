@@ -337,15 +337,15 @@ object ByteCodec {
         else {
           val (tag, chunk) = from.splitAt(1)
           for {
-            codec <- codecFor(tag(0)).mapError(_ => DeserializationTypeError(s"No codec found for tag ${tag(0)}"))
+            codec <- codecFor(tag(0)).orElseFail(DeserializationTypeError(s"No codec found for tag ${tag(0)}"))
             data  <- codec.fromChunk(chunk)
           } yield data
         }
 
       def toChunk(a: A): IO[SerializationTypeError, Chunk[Byte]] =
         for {
-          tag   <- tagOf(a).mapError(_ => SerializationTypeError(s"No tag found for type ${a.getClass}"))
-          codec <- codecFor(tag).mapError(_ => SerializationTypeError(s"No codec found for tag $tag"))
+          tag   <- tagOf(a).orElseFail(SerializationTypeError(s"No tag found for type ${a.getClass}"))
+          codec <- codecFor(tag).orElseFail(SerializationTypeError(s"No codec found for tag $tag"))
           chunk <- codec.toChunk(a).map(Chunk.single(tag) ++ _)
         } yield chunk
     }

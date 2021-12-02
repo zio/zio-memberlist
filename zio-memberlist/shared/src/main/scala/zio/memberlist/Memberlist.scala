@@ -23,7 +23,7 @@ object Memberlist {
     def send(data: A, receipt: NodeName): UIO[Unit]
   }
 
-  type Env = Has[MemberlistConfig] with Discovery with Logging with Clock
+  type Env = Has[MemberlistConfig] with Has[Discovery] with Logging with Clock
 
   final private[this] val QueueSize = 1000
 
@@ -38,7 +38,7 @@ object Memberlist {
 
     val managed =
       for {
-        env              <- ZManaged.environment[MessageSequence with Nodes]
+        env              <- ZManaged.environment[Has[MessageSequenceNo] with Has[Nodes]]
         localConfig      <- getConfig[MemberlistConfig].toManaged_
         _                <- log.info("starting SWIM on port: " + localConfig.port).toManaged_
         udpTransport     <- transport.udp.live(localConfig.messageSizeLimit).build.map(_.get)
@@ -58,7 +58,7 @@ object Memberlist {
         messages0    <- MessageSink.make(localNodeName, localAddress, broadcast0, udpTransport)
         _            <- messages0.process(allProtocols).toManaged_
         localNode     = Node(localConfig.name, localAddress, Chunk.empty, NodeState.Alive)
-        _            <- env.get[Nodes.Service].addNode(localNode).commit.toManaged_
+        _            <- env.get[Nodes].addNode(localNode).commit.toManaged_
       } yield new Memberlist.Service[B] {
 
         override def broadcast(data: B): IO[SerializationError, Unit] =
@@ -76,12 +76,12 @@ object Memberlist {
           userOut.offer(Message.BestEffort(receipt, data)).unit
 
         override def events: Stream[Nothing, MembershipEvent] =
-          env.get[Nodes.Service].events
+          env.get[Nodes].events
 
         override def localMember: NodeName = localNodeName
 
         override def nodes: UIO[Set[NodeName]] =
-          env.get[Nodes.Service].healthyNodes.map(_.map(_._1).toSet).commit
+          env.get[Nodes].healthyNodes.map(_.map(_._1).toSet).commit
       }
 
     internalLayer >>> ZLayer.fromManaged(managed)

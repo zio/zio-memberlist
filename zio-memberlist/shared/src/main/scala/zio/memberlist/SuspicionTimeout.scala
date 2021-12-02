@@ -4,6 +4,7 @@ import zio.clock.{Clock, currentTime}
 import zio.config._
 import zio.duration._
 import zio.logging.{Logger, Logging}
+import zio.memberlist.SuspicionTimeout.Timeout
 import zio.memberlist.SwimError.{SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled}
 import zio.memberlist.protocols.messages.FailureDetection
 import zio.memberlist.protocols.messages.FailureDetection.Dead
@@ -13,25 +14,23 @@ import zio.stm.{TQueue, _}
 import zio.{Has, IO, UIO, URIO, ZIO, ZLayer}
 
 import java.util.concurrent.TimeUnit
-
+trait SuspicionTimeout  {
+  def registerTimeout[A](node: NodeName): STM[SuspicionTimeoutAlreadyStarted, Timeout]
+  def cancelTimeout(node: NodeName): USTM[Unit]
+  def incomingSuspect(node: NodeName, from: NodeName): USTM[Unit]
+}
 object SuspicionTimeout {
 
-  trait Service {
-    def registerTimeout[A](node: NodeName): STM[SuspicionTimeoutAlreadyStarted, Timeout]
-    def cancelTimeout(node: NodeName): USTM[Unit]
-    def incomingSuspect(node: NodeName, from: NodeName): USTM[Unit]
-  }
+  def registerTimeout[A](node: NodeName): ZSTM[Has[SuspicionTimeout], SuspicionTimeoutAlreadyStarted, Timeout] =
+    ZSTM.accessM[Has[SuspicionTimeout]](_.get.registerTimeout(node))
 
-  def registerTimeout[A](node: NodeName): ZSTM[SuspicionTimeout, SuspicionTimeoutAlreadyStarted, Timeout] =
-    ZSTM.accessM[SuspicionTimeout](_.get.registerTimeout(node))
+  def incomingSuspect(node: NodeName, from: NodeName): URSTM[Has[SuspicionTimeout], Unit] =
+    ZSTM.accessM[Has[SuspicionTimeout]](_.get.incomingSuspect(node, from))
 
-  def incomingSuspect(node: NodeName, from: NodeName): URSTM[SuspicionTimeout, Unit] =
-    ZSTM.accessM[SuspicionTimeout](_.get.incomingSuspect(node, from))
+  def cancelTimeout(node: NodeName): URSTM[Has[SuspicionTimeout], Unit] =
+    ZSTM.accessM[Has[SuspicionTimeout]](_.get.cancelTimeout(node))
 
-  def cancelTimeout(node: NodeName): URSTM[SuspicionTimeout, Unit] =
-    ZSTM.accessM[SuspicionTimeout](_.get.cancelTimeout(node))
-
-  private case class SuspicionTimeoutEntry(
+  final case class SuspicionTimeoutEntry(
     queue: TQueue[TimeoutCmd]
   )
 
@@ -46,13 +45,13 @@ object SuspicionTimeout {
     promise: TPromise[Error, Message[FailureDetection]],
     suspicionRequiredConfirmations: Int,
     store: TMap[NodeName, SuspicionTimeoutEntry],
-    env: Clock with Nodes with Logging with IncarnationSequence
+    env: Clock with Has[Nodes] with Logging with Has[IncarnationSequence]
   ) {
 
-    val nodes: Nodes.Service           = env.get[Nodes.Service]
+    val nodes: Nodes                   = env.get[Nodes]
     val clock: Clock.Service           = env.get[Clock.Service]
     val logger: Logger[String]         = env.get[Logger[String]]
-    val currentIncarnation: USTM[Long] = env.get[IncarnationSequence.Service].current
+    val currentIncarnation: USTM[Long] = env.get[IncarnationSequence].current
 
     private val action: STM[Error, Message[Dead]] =
       ZSTM
@@ -118,7 +117,7 @@ object SuspicionTimeout {
     suspicionAlpha: Int,
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
-  ): ZIO[Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout.Service] =
+  ): ZIO[Clock with Has[Nodes] with Logging with Has[IncarnationSequence], Nothing, SuspicionTimeout] =
     TMap
       .empty[NodeName, SuspicionTimeoutEntry]
       .commit
@@ -136,11 +135,11 @@ object SuspicionTimeout {
               .fork
           )
       )
-      .zip(ZIO.environment[Clock with Nodes with Logging with IncarnationSequence])
+      .zip(ZIO.environment[Clock with Has[Nodes] with Logging with Has[IncarnationSequence]])
       .map { case ((store, startTimeout), env) =>
-        val nodes = env.get[Nodes.Service]
+        val nodes = env.get[Nodes]
 
-        new Service {
+        new SuspicionTimeout {
 
           override def cancelTimeout(node: NodeName): USTM[Unit] =
             store
@@ -199,12 +198,12 @@ object SuspicionTimeout {
     suspicionAlpha: Int,
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
-  ): ZLayer[Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout] =
+  ): ZLayer[Clock with Has[Nodes] with Logging with Has[IncarnationSequence], Nothing, Has[SuspicionTimeout]] =
     live0(protocolInterval, suspicionAlpha, suspicionBeta, suspicionRequiredConfirmations).toLayer
 
   val liveWithConfig: ZLayer[Has[
     MemberlistConfig
-  ] with Clock with Nodes with Logging with IncarnationSequence, Nothing, SuspicionTimeout] =
+  ] with Clock with Has[Nodes] with Logging with Has[IncarnationSequence], Nothing, Has[SuspicionTimeout]] =
     getConfig[MemberlistConfig]
       .flatMap(config =>
         live0(

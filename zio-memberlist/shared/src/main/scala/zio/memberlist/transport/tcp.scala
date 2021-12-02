@@ -18,7 +18,7 @@ object tcp {
     connectionTimeout: Duration,
     sendTimeout: Duration,
     retryInterval: Duration = 50.millis
-  ): ZLayer[Clock with Logging, Nothing, Transport] = ZLayer.fromFunction { env =>
+  ): ZLayer[Clock with Logging, Nothing, Has[Transport]] = ZLayer.fromFunction { env =>
     def toConnection(
       channel: AsynchronousSocketChannel,
       id: ju.UUID,
@@ -58,7 +58,7 @@ object tcp {
         override val close: UIO[Unit] = close0
       }
 
-    new Transport.Service {
+    new Transport {
       override def connect(to: NodeAddress): Managed[TransportError, ChunkConnection] = {
         for {
           id         <- uuid.makeRandomUUID.toManaged_

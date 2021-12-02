@@ -6,9 +6,9 @@ import zio.logging.Logging
 import zio.memberlist.SwimError.{SuspicionTimeoutAlreadyStarted, SuspicionTimeoutCancelled}
 import zio.memberlist.state._
 import zio.test.Assertion.{equalTo, isLeft}
+import zio.test._
 import zio.test.environment.{TestClock, TestEnvironment}
-import zio.test.{Spec, TestFailure, TestSuccess, assert, assertTrue, suite, testM}
-import zio.{Chunk, ZIO, ZLayer}
+import zio.{Chunk, Has, ZIO, ZLayer}
 
 object SuspicionTimeoutSpec extends KeeperSpec {
 
@@ -20,9 +20,9 @@ object SuspicionTimeoutSpec extends KeeperSpec {
     suspicionBeta: Int,
     suspicionRequiredConfirmations: Int
   ): ZLayer[
-    Clock with zio.console.Console with Clock with Any,
+    Clock with zio.console.Console,
     Nothing,
-    Clock with Logging with IncarnationSequence with Nodes with SuspicionTimeout
+    Clock with Logging with Has[IncarnationSequence] with Has[Nodes] with Has[SuspicionTimeout]
   ] =
     (ZLayer
       .requires[Clock] ++ logger ++ IncarnationSequence.live) >+> Nodes.live(

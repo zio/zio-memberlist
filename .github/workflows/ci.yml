@@ -18,11 +18,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout current branch
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.4.0
         with:
           fetch-depth: 0
       - name: Setup Scala and Java
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
       - name: Cache scala dependencies
         uses: coursier/cache-action@v6
       - name: Lint code
@@ -33,9 +33,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout current branch
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.4.0
       - name: Setup Scala and Java
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
       - name: Cache scala dependencies
         uses: coursier/cache-action@v6
       - name: Check Document Generation
@@ -48,15 +48,15 @@ jobs:
       fail-fast: false
       matrix:
         java: ['adopt@1.8', 'adopt@1.11']
-        scala: ['2.11.12', '2.12.15', '2.13.6', '3.0.0']
-        platform: ['JVM', 'JS', 'Native']
+        scala: ['2.11.12', '2.12.15', '2.13.6', '3.1.0']
+        platform: ['JVM', 'JS']
     steps:
       - name: Checkout current branch
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.4.0
         with:
           fetch-depth: 0
       - name: Setup Scala and Java
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
         with:
           java-version: ${{ matrix.java }}
       - name: Cache scala dependencies
@@ -82,11 +82,11 @@ jobs:
     if: github.event_name != 'pull_request'
     steps:
       - name: Checkout current branch
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2.4.0
         with:
           fetch-depth: 0
       - name: Setup Scala and Java 
-        uses: olafurpg/setup-scala@v10
+        uses: olafurpg/setup-scala@v13
       - name: Cache scala dependencies
         uses: coursier/cache-action@v6
       - name: Release artifacts

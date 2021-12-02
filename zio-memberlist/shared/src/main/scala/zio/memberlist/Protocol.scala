@@ -75,10 +75,14 @@ object Protocol {
             acc.orElse(a.asInstanceOf[Protocol[A]].onMessage(msg))
           )
 
-      override val produceMessages: Stream[Error, Message[A]] =
-        ZStream.mergeAllUnbounded()(
-          (first.produceMessages :: second.produceMessages :: rest.map(_.produceMessages).toList): _*
-        )
+      override val produceMessages: Stream[Error, Message[A]] = {
+        val allStreams: List[Stream[Error, Message[A]]] =
+          first.asInstanceOf[Protocol[A]].produceMessages :: second
+            .asInstanceOf[Protocol[A]]
+            .produceMessages :: rest.map(_.asInstanceOf[Protocol[A]].produceMessages).toList
+
+        ZStream.mergeAllUnbounded()(allStreams: _*)
+      }
 
     }
 

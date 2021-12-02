@@ -5,11 +5,9 @@ import zio.{Chunk, Has, ZIO, ZManaged}
 
 package object transport {
 
-  type ConnectionLessTransport = Has[ConnectionLessTransport.Service]
-  type Transport               = Has[Transport.Service]
-  type ChunkConnection         = Connection[Any, TransportError, Chunk[Byte]]
+  type ChunkConnection = Connection[Any, TransportError, Chunk[Byte]]
 
-  def bind[R <: ConnectionLessTransport](
+  def bind[R <: Has[ConnectionLessTransport]](
     localAddr: SocketAddress
   )(
     connectionHandler: Channel => ZIO[R, Nothing, Unit]
@@ -18,7 +16,7 @@ package object transport {
       .environment[R]
       .flatMap(env =>
         env
-          .get[ConnectionLessTransport.Service]
+          .get[ConnectionLessTransport]
           .bind(localAddr)(conn => connectionHandler(conn).provide(env))
       )
 

@@ -3,12 +3,12 @@ package zio.memberlist
 import zio.memberlist.Broadcast.Item
 import zio.memberlist.state._
 import zio.stm.{STM, TRef}
-import zio.{Chunk, UIO, URIO, ZIO}
+import zio.{Chunk, Has, UIO, URIO, ZIO}
 
 import scala.collection.immutable.TreeSet
 
 final class Broadcast(
-  nodes: Nodes.Service,
+  nodes: Nodes,
   ref: TRef[TreeSet[Item]],
   sequenceId: TRef[Int],
   messageOverhead: Int,
@@ -50,8 +50,8 @@ final class Broadcast(
 
 object Broadcast {
 
-  def make(mtu: Int, resentMultiplier: Int): URIO[Nodes, Broadcast] =
-    ZIO.accessM[Nodes](nodes =>
+  def make(mtu: Int, resentMultiplier: Int): URIO[Has[Nodes], Broadcast] =
+    ZIO.accessM[Has[Nodes]](nodes =>
       STM
         .mapN(TRef.make(TreeSet.empty[Item]), TRef.make(0))(new Broadcast(nodes.get, _, _, 3, mtu, resentMultiplier))
         .commit

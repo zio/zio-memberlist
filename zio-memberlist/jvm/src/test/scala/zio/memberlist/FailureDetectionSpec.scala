@@ -8,7 +8,7 @@ import zio.logging._
 import zio.memberlist.protocols.messages.FailureDetection._
 import zio.memberlist.protocols.{FailureDetection, messages}
 import zio.memberlist.state._
-import zio.test.Assertion.equalTo
+import zio.test.Assertion.{equalTo, hasSameElementsDistinct}
 import zio.test.TestAspect.ignore
 import zio.test._
 import zio.test.environment.{TestClock, TestEnvironment}
@@ -23,7 +23,9 @@ object FailureDetectionSpec extends KeeperSpec {
   val nodesLayer: ZLayer[
     Console with Clock with Console with Clock with Any with Any with Any with Any,
     Nothing,
-    Console with Clock with Logging with IncarnationSequence with MessageSequence with MessageAcknowledge with LocalHealthMultiplier with Nodes with SuspicionTimeout
+    Console with Clock with Logging with Has[IncarnationSequence] with Has[MessageSequenceNo] with Has[
+      MessageAcknowledge
+    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout]
   ] = (
     ZLayer.requires[Console] ++
       ZLayer.requires[Clock] ++
@@ -36,9 +38,7 @@ object FailureDetectionSpec extends KeeperSpec {
     .live(NodeName("test-node")) >+> SuspicionTimeout.live(protocolPeriod, 3, 5, 3)
 
   val recorder
-    : ZLayer[Clock with Logging with Nodes with FailureDetection.Env, Nothing, ProtocolRecorder.ProtocolRecorder[
-      messages.FailureDetection
-    ]] =
+    : ZLayer[Clock with Logging with FailureDetection.Env, Nothing, Has[ProtocolRecorder[messages.FailureDetection]]] =
     ProtocolRecorder
       .make(
         FailureDetection
@@ -48,11 +48,13 @@ object FailureDetectionSpec extends KeeperSpec {
       .orDie
 
   val testLayer: ZLayer[
-    Console with Clock with Console with Clock with Any with Any with Any with Any,
+    Console with Clock,
     Nothing,
-    Console with Clock with Logging with IncarnationSequence with MessageSequence with MessageAcknowledge with LocalHealthMultiplier with Nodes with SuspicionTimeout with ProtocolRecorder.ProtocolRecorder[
+    Console with Clock with Logging with Has[IncarnationSequence] with Has[MessageSequenceNo] with Has[
+      MessageAcknowledge
+    ] with Has[LocalHealthMultiplier] with Has[Nodes] with Has[SuspicionTimeout] with Has[ProtocolRecorder[
       messages.FailureDetection
-    ]
+    ]]
   ] = nodesLayer >+> recorder
 
   val node1: Node = Node(NodeName("node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)
@@ -69,14 +71,14 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(100.seconds)
         messages <- recorder.collectN(3) { case Message.BestEffort(addr, _: Ping) => addr }
-      } yield assertTrue(messages.toSet == Set(node1.name, node2.name))
+      } yield assert(messages)(hasSameElementsDistinct(List(node1.name, node2.name)))
     }.provideCustomLayer(testLayer),
     // The test is passing locally, but for some reasons in CircleCI it always
     // times out for 2.12 at JDK8, while the other versions eventually pass;
     // I will ignore it for now, but it needs to be addressed in the future.
     testM("should change to Dead if there is no nodes to send PingReq") {
       for {
-        recorder  <- ProtocolRecorder[messages.FailureDetection]()
+        recorder  <- ProtocolRecorder[messages.FailureDetection](PartialFunction.empty)
         _         <- Nodes.addNode(node1).commit
         _         <- TestClock.adjust(1500.milliseconds)
         messages  <- recorder.collectN(2) { case msg => msg }
@@ -99,7 +101,7 @@ object FailureDetectionSpec extends KeeperSpec {
         _        <- Nodes.addNode(node2).commit
         _        <- TestClock.adjust(10.seconds)
         msg      <- recorder.collectN(1) { case Message.BestEffort(_, msg: PingReq) => msg }
-      } yield assertTrue(msg == List(PingReq(1, node1.name)))
+      } yield assertTrue(msg.map(_.target) == List(node1.name))
     }.provideCustomLayer(testLayer),
     testM("should change to Healthy when ack after PingReq arrives") {
       for {

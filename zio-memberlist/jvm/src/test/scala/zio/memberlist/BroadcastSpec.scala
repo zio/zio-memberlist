@@ -11,8 +11,8 @@ import java.util.UUID
 
 object BroadcastSpec extends KeeperSpec {
 
-  val logger: ZLayer[zio.console.Console with Clock, Nothing, Logging]             = Logging.console()
-  val testLayer: ZLayer[Clock with zio.console.Console with Clock, Nothing, Nodes] =
+  val logger: ZLayer[zio.console.Console with Clock, Nothing, Logging]                  = Logging.console()
+  val testLayer: ZLayer[Clock with zio.console.Console with Clock, Nothing, Has[Nodes]] =
     (ZLayer.requires[Clock] ++ logger) >>> Nodes.live(NodeName(UUID.randomUUID().toString))
 
   val node1: Node = Node(NodeName("node-1"), NodeAddress(Chunk(1, 1, 1, 1), 1111), Chunk.empty, NodeState.Alive)

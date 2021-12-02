@@ -4,17 +4,20 @@ import zio.duration.Duration
 import zio.logging.{Logger, Logging}
 import zio.memberlist.Error
 import zio.nio.core.{InetAddress, InetSocketAddress}
-import zio.{IO, Layer, UIO, ZLayer}
+import zio.{Has, IO, Layer, UIO, ZIO, ZLayer}
+
+trait Discovery {
+  def discoverNodes: IO[Error, Set[InetSocketAddress]]
+}
 
 object Discovery {
 
-  trait Service {
-    def discoverNodes: IO[Error, Set[InetSocketAddress]]
-  }
+  def discoverNodes: ZIO[Has[Discovery], Error, Set[InetSocketAddress]] =
+    ZIO.accessM[Has[Discovery]](_.get.discoverNodes)
 
-  def staticList(addresses: Set[InetSocketAddress]): Layer[Nothing, Discovery] =
+  def staticList(addresses: Set[InetSocketAddress]): Layer[Nothing, Has[Discovery]] =
     ZLayer.succeed {
-      new Service {
+      new Discovery {
         final override val discoverNodes: UIO[Set[InetSocketAddress]] =
           UIO.succeed(addresses)
       }
@@ -25,7 +28,7 @@ object Discovery {
    *
    * Headless service is a service of type ClusterIP with the clusterIP property set to None.
    */
-  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Discovery] =
+  def k8Dns(address: InetAddress, timeout: Duration, port: Int): ZLayer[Logging, Nothing, Has[Discovery]] =
     ZLayer.fromFunction { logging =>
       new K8DnsDiscovery(logging.get[Logger[String]], address, timeout, port)
     }

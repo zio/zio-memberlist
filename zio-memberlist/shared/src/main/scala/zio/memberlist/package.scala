@@ -4,13 +4,7 @@ import zio.memberlist.state.NodeName
 import zio.stream.ZStream
 
 package object memberlist {
-  type MessageSequence       = Has[MessageSequenceNo.Service]
-  type IncarnationSequence   = Has[IncarnationSequence.Service]
-  type Nodes                 = Has[state.Nodes.Service]
-  type MessageAcknowledge    = Has[MessageAcknowledge.Service]
-  type SuspicionTimeout      = Has[SuspicionTimeout.Service]
-  type Memberlist[A]         = Has[Memberlist.Service[A]]
-  type LocalHealthMultiplier = Has[LocalHealthMultiplier.Service]
+  type Memberlist[A] = Has[Memberlist.Service[A]]
 
   def broadcast[A: Tag](data: A): ZIO[Memberlist[A], Error, Unit] =
     ZIO.accessM(_.get.broadcast(data))

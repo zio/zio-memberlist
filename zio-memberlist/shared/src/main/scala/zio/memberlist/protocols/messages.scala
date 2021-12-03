@@ -24,7 +24,7 @@ object messages {
         Suspect,
         Alive,
         Dead,
-        User[A],
+        User[A]
       ]
   }
 

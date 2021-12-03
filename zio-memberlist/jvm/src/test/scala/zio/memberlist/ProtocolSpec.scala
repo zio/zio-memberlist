@@ -12,9 +12,9 @@ object ProtocolSpec extends KeeperSpec {
 
   val protocolDefinition: ZIO[Any with Any, Error, Protocol[PingPong]] = Protocol[PingPong].make(
     {
-      case Message.BestEffort(sender, Ping(i)) =>
-        ZIO.succeed(Message.BestEffort(sender, Pong(i)))
-      case _                                   => Message.noResponse
+      case Message.BestEffortByName(sender, Ping(i)) =>
+        ZIO.succeed(Message.BestEffortByName(sender, Pong(i)))
+      case _                                         => Message.noResponse
     },
     ZStream.empty
   )
@@ -25,20 +25,20 @@ object ProtocolSpec extends KeeperSpec {
     testM("request response") {
       for {
         protocol <- protocolDefinition
-        response <- protocol.onMessage(Message.BestEffort(testNode, Ping(123)))
-      } yield assert(response)(equalTo(Message.BestEffort(testNode, Pong(123))))
+        response <- protocol.onMessage(Message.BestEffortByName(testNode, Ping(123)))
+      } yield assert(response)(equalTo(Message.BestEffortByName(testNode, Pong(123))))
     },
     testM("binary request response") {
       for {
         protocol       <- protocolDefinition.map(_.binary)
         binaryMessage  <- ByteCodec.encode[PingPong](Ping(123))
-        responseBinary <- protocol.onMessage(Message.BestEffort(testNode, binaryMessage))
+        responseBinary <- protocol.onMessage(Message.BestEffortByName(testNode, binaryMessage))
         response       <- responseBinary match {
-                            case Message.BestEffort(addr, chunk) =>
-                              ByteCodec.decode[PingPong](chunk).map(pp => Message.BestEffort(addr, pp))
-                            case _                               => ZIO.succeed(Message.NoResponse)
+                            case Message.BestEffortByName(addr, chunk) =>
+                              ByteCodec.decode[PingPong](chunk).map(pp => Message.BestEffortByName(addr, pp))
+                            case _                                     => ZIO.succeed(Message.NoResponse)
                           }
-      } yield assert(response)(equalTo(Message.BestEffort[PingPong](testNode, Pong(123))))
+      } yield assert(response)(equalTo(Message.BestEffortByName[PingPong](testNode, Pong(123))))
     }
   )
 

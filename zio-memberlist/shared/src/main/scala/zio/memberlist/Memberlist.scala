@@ -7,7 +7,7 @@ import zio.logging._
 import zio.memberlist.discovery.Discovery
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.protocols.messages.MemberlistMessage
-import zio.memberlist.protocols.{FailureDetection, User, messages}
+import zio.memberlist.protocols.{FailureDetection, Initial, User, messages}
 import zio.memberlist.state._
 import zio.stream.{Stream, ZStream}
 import zio.{Chunk, Has, IO, Queue, UIO, ZLayer, ZManaged}
@@ -42,23 +42,24 @@ object Memberlist {
         localConfig      <- getConfig[MemberlistConfig].toManaged_
         _                <- log.info("starting SWIM on port: " + localConfig.port).toManaged_
         udpTransport     <- transport.udp.live(localConfig.messageSizeLimit).build.map(_.get)
-        userIn           <- Queue.bounded[Message.BestEffort[B]](QueueSize).toManaged(_.shutdown)
-        userOut          <- Queue.bounded[Message.BestEffort[B]](QueueSize).toManaged(_.shutdown)
+        userIn           <- Queue.bounded[Message.BestEffortByName[B]](QueueSize).toManaged(_.shutdown)
+        userOut          <- Queue.bounded[Message.BestEffortByName[B]](QueueSize).toManaged(_.shutdown)
         localNodeName     = localConfig.name
-        //        initial          <- Initial.protocol(localNodeAddress).toManaged_
+        localAddress     <- NodeAddress.local(localConfig.port).toManaged_
+        initial          <- Initial.protocol(localAddress, localNodeName).toManaged_
         failureDetection <- FailureDetection
                               .protocol(localConfig.protocolInterval, localConfig.protocolTimeout, localNodeName)
                               .toManaged_
 
-        user         <- User.protocol[B](userIn, userOut).toManaged_
+        user        <- User.protocol[B](userIn, userOut).toManaged_
         //        deadLetter   <- DeadLetter.protocol.toManaged_
-        allProtocols  = Protocol.compose[MemberlistMessage](failureDetection, user).binary
-        broadcast0   <- Broadcast.make(localConfig.messageSizeLimit, localConfig.broadcastResent).toManaged_
-        localAddress <- NodeAddress.local(localConfig.port).toManaged_
-        messages0    <- MessageSink.make(localNodeName, localAddress, broadcast0, udpTransport)
-        _            <- messages0.process(allProtocols).toManaged_
-        localNode     = Node(localConfig.name, localAddress, Chunk.empty, NodeState.Alive)
-        _            <- env.get[Nodes].addNode(localNode).commit.toManaged_
+        allProtocols = Protocol.compose[MemberlistMessage](initial, failureDetection, user).binary
+        broadcast0  <- Broadcast.make(localConfig.messageSizeLimit, localConfig.broadcastResent).toManaged_
+
+        messages0 <- MessageSink.make(localNodeName, localAddress, broadcast0, udpTransport)
+        _         <- messages0.process(allProtocols).toManaged_
+        localNode  = Node(localConfig.name, localAddress, Chunk.empty, NodeState.Alive)
+        _         <- env.get[Nodes].addNode(localNode).commit.toManaged_
       } yield new Memberlist.Service[B] {
 
         override def broadcast(data: B): IO[SerializationError, Unit] =
@@ -68,12 +69,12 @@ object Memberlist {
           } yield ()
 
         override val receive: Stream[Nothing, (NodeName, B)] =
-          ZStream.fromQueue(userIn).collect { case Message.BestEffort(n, m) =>
+          ZStream.fromQueue(userIn).collect { case Message.BestEffortByName(n, m) =>
             (n, m)
           }
 
         override def send(data: B, receipt: NodeName): UIO[Unit] =
-          userOut.offer(Message.BestEffort(receipt, data)).unit
+          userOut.offer(Message.BestEffortByName(receipt, data)).unit
 
         override def events: Stream[Nothing, MembershipEvent] =
           env.get[Nodes].events

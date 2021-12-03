@@ -31,9 +31,9 @@ object MessagesSpec extends KeeperSpec {
 
         val protocol = Protocol[PingPong].make(
           {
-            case Message.BestEffort(sender, Ping(i)) =>
-              ZIO.succeed(Message.BestEffort(sender, Pong(i)))
-            case _                                   =>
+            case Message.BestEffortByName(sender, Ping(i)) =>
+              ZIO.succeed(Message.BestEffortByName(sender, Pong(i)))
+            case _                                         =>
               Message.noResponse
           },
           ZStream.empty
@@ -58,15 +58,15 @@ object MessagesSpec extends KeeperSpec {
 
         val protocol = Protocol[PingPong].make(
           {
-            case Message.BestEffort(sender, Ping(i)) =>
+            case Message.BestEffortByName(sender, Ping(i)) =>
               ZIO.succeed(
                 Message.Batch(
-                  Message.BestEffort(sender, Pong(i)),
+                  Message.BestEffortByName(sender, Pong(i)),
                   Message.Broadcast(Pong(i)),
                   List.fill(2000)(Message.Broadcast(Ping(1))): _*
                 )
               )
-            case _                                   =>
+            case _                                         =>
               Message.noResponse
           },
           ZStream.empty

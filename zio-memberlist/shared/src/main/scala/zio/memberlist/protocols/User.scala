@@ -8,15 +8,15 @@ import zio.stream._
 object User {
 
   def protocol[B: ByteCodec](
-    userIn: zio.Queue[Message.BestEffort[B]],
-    userOut: zio.Queue[Message.BestEffort[B]]
+    userIn: zio.Queue[Message.BestEffortByName[B]],
+    userOut: zio.Queue[Message.BestEffortByName[B]]
   ): ZIO[Any, Error, Protocol[messages.User[B]]] =
     Protocol[messages.User[B]].make(
-      msg => userIn.offer(Message.BestEffort(msg.node, msg.message.msg)).as(Message.NoResponse),
+      msg => userIn.offer(Message.BestEffortByName(msg.node, msg.message.msg)).as(Message.NoResponse),
       ZStream
         .fromQueue(userOut)
-        .collect { case Message.BestEffort(node, msg) =>
-          Message.BestEffort(node, messages.User(msg))
+        .collect { case Message.BestEffortByName(node, msg) =>
+          Message.BestEffortByName(node, messages.User(msg))
         }
     )
 

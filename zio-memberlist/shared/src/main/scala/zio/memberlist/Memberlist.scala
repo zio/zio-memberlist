@@ -12,22 +12,21 @@ import zio.memberlist.state._
 import zio.stream.{Stream, ZStream}
 import zio.{Chunk, Has, IO, Queue, UIO, ZLayer, ZManaged}
 
-object Memberlist {
-
-  trait Service[A] {
-    def broadcast(data: A): IO[zio.memberlist.Error, Unit]
-    def events: Stream[Nothing, MembershipEvent]
-    def localMember: NodeName
-    def nodes: UIO[Set[NodeName]]
-    def receive: Stream[Nothing, (NodeName, A)]
-    def send(data: A, receipt: NodeName): UIO[Unit]
-  }
+trait Memberlist[A] {
+  def broadcast(data: A): IO[zio.memberlist.Error, Unit]
+  def events: Stream[Nothing, MembershipEvent]
+  def localMember: NodeName
+  def nodes: UIO[Set[NodeName]]
+  def receive: Stream[Nothing, (NodeName, A)]
+  def send(data: A, receipt: NodeName): UIO[Unit]
+}
+object Memberlist   {
 
   type Env = Has[MemberlistConfig] with Has[Discovery] with Logging with Clock
 
   final private[this] val QueueSize = 1000
 
-  def live[B: ByteCodec: Tag]: ZLayer[Env, Error, Memberlist[B]] = {
+  def live[B: ByteCodec: Tag]: ZLayer[Env, Error, Has[Memberlist[B]]] = {
     val internalLayer =
       (ZLayer.requires[Env] ++
         MessageSequenceNo.live ++
@@ -60,7 +59,7 @@ object Memberlist {
         _         <- messages0.process(allProtocols).toManaged_
         localNode  = Node(localConfig.name, localAddress, Chunk.empty, NodeState.Alive)
         _         <- env.get[Nodes].addNode(localNode).commit.toManaged_
-      } yield new Memberlist.Service[B] {
+      } yield new Memberlist[B] {
 
         override def broadcast(data: B): IO[SerializationError, Unit] =
           for {

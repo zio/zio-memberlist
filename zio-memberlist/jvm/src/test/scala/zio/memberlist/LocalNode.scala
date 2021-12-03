@@ -38,7 +38,7 @@ class LocalNode(port: Int) extends zio.App {
 
   val dependencies: ZLayer[Console with Clock with zio.system.System, Error, Logging with Has[
     MemberlistConfig
-  ] with Has[Discovery] with Clock with Memberlist[ChaosMonkey]] = {
+  ] with Has[Discovery] with Clock with Has[Memberlist[ChaosMonkey]]] = {
     val config  = ZLayer.succeed(
       MemberlistConfig(
         name = NodeName("local_node_" + port),
@@ -58,7 +58,7 @@ class LocalNode(port: Int) extends zio.App {
     (seeds ++ Clock.live) >+> Memberlist.live[ChaosMonkey]
   }
 
-  val program: URIO[Memberlist[ChaosMonkey] with Logging with zio.console.Console, ExitCode] =
+  val program: URIO[Has[Memberlist[ChaosMonkey]] with Logging with zio.console.Console, ExitCode] =
     receive[ChaosMonkey].foreach { case (sender, message) =>
       log.info(s"receive message: $message from: $sender") *>
         ZIO.whenCase(message) { case SimulateCpuSpike =>

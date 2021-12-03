@@ -16,7 +16,7 @@ object ByteCodecSpec extends DefaultRunnableSpec {
     Alive,
     Dead,
     Initial.Join,
-    Initial.Accept.type,
+    Initial.Accept,
     Initial.Reject
   ]
 
@@ -33,7 +33,7 @@ object ByteCodecSpec extends DefaultRunnableSpec {
       ByteCodecLaws[Dead](gens.dead),
       //swim initial
       ByteCodecLaws[Initial.Join](gens.swimJoin),
-      ByteCodecLaws[Initial.Accept.type](gens.swimAccept),
+      ByteCodecLaws[Initial.Accept](gens.swimAccept),
       ByteCodecLaws[Initial.Reject](gens.swimReject),
       ByteCodecLaws[MemberlistMessage](Gen.oneOf(gens.failureDetectionProtocol, gens.initialSwimlProtocol))
     )

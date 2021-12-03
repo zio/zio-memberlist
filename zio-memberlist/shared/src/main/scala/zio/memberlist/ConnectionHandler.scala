@@ -24,11 +24,11 @@ object ConnectionHandler {
           values =>
             ZIO.foreach_(values) { withPiggyback =>
               val take =
-                Take.single(Message.BestEffort(withPiggyback.node, withPiggyback.message))
+                Take.single(Message.BestEffortByName(withPiggyback.node, withPiggyback.message))
 
               messages.offer(take) *>
                 ZIO.foreach_(withPiggyback.gossip) { chunk =>
-                  messages.offer(Take.single(Message.BestEffort(withPiggyback.node, chunk)))
+                  messages.offer(Take.single(Message.BestEffortByName(withPiggyback.node, chunk)))
                 }
             }
         )

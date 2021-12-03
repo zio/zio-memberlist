@@ -140,7 +140,7 @@ object Nodes {
             nodeStates.toList
               .map(
                 _.filter(entry =>
-                  (entry._2.state == NodeState.Alive || entry._2.state == NodeState.Suspect || entry._1 == localNodeName) && !exclude
+                  (entry._2.state == NodeState.Alive || entry._2.state == NodeState.Suspect) && entry._1 != localNodeName && !exclude
                     .contains(entry._1)
                 )
               )
@@ -161,7 +161,7 @@ object Nodes {
         nodeStates.keys.map(_.size)
 
       def healthyNodes: USTM[List[(NodeName, Node)]] =
-        nodeStates.toList.map(_.filter(_._2.state == NodeState.Alive))
+        nodeStates.toList.map(_.filter(entry => entry._2.state == NodeState.Alive && entry._1 != localNodeName))
 
       val prettyPrint: USTM[String] =
         nodeStates.toList.map(nodes =>

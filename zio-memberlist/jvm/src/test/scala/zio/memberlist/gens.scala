@@ -64,11 +64,11 @@ object gens {
   val failureDetectionProtocol: Gen[Random with Sized, FailureDetection] =
     Gen.oneOf(ping, ack, nack, pingReq, suspect, alive, dead)
 
-  val swimJoin: Gen[Random with Sized, Initial.Join] =
-    nodeAddress.map(Initial.Join(_))
+  val swimJoin: Gen[Random with Sized, Initial.Join]     =
+    nodeAddress.zip(nodeName).map { case (addr, name) => Initial.Join(addr, name) }
 
-  val swimAccept: Gen[Random with Sized, Initial.Accept.type] =
-    Gen.const(Initial.Accept)
+  val swimAccept: Gen[Random with Sized, Initial.Accept] =
+    nodeAddress.map(Initial.Accept(_))
 
   val swimReject: Gen[Random with Sized, Initial.Reject] =
     Gen.alphaNumericString.map(Initial.Reject(_))

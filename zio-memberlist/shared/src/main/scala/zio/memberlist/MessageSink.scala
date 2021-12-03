@@ -22,23 +22,29 @@ class MessageSink(
    */
   def send(msg: Message[Chunk[Byte]]): ZIO[Clock with Logging with Has[Nodes], Error, Unit] =
     msg match {
-      case Message.NoResponse                            => ZIO.unit
-      case Message.BestEffort(nodeAddress, message)      =>
+      case Message.NoResponse                                => ZIO.unit
+      case Message.BestEffortByName(nodeName, message)       =>
         for {
           broadcast    <- broadcast.broadcast(message.size)
           withPiggyback = WithPiggyback(local, message, broadcast)
           chunk        <- ByteCodec[WithPiggyback].toChunk(withPiggyback)
-          nodeAddress  <- Nodes.nodeAddress(nodeAddress).commit.flatMap(_.socketAddress)
+          nodeAddress  <- Nodes.nodeAddress(nodeName).commit.flatMap(_.socketAddress)
           _            <- sendBestEffort(nodeAddress, chunk)
         } yield ()
-      case msg: Message.Batch[Chunk[Byte] @unchecked]    =>
+      case Message.BestEffortByAddress(nodeAddress, message) =>
+        for {
+          chunk         <- ByteCodec[WithPiggyback].toChunk(WithPiggyback(local, message, Nil))
+          socketAddress <- nodeAddress.socketAddress
+          _             <- sendBestEffort(socketAddress, chunk)
+        } yield ()
+      case msg: Message.Batch[Chunk[Byte] @unchecked]        =>
         val (broadcast, rest) =
           (msg.first :: msg.second :: msg.rest.toList).partition(_.isInstanceOf[Message.Broadcast[_]])
         ZIO.foreach_(broadcast)(send) *>
           ZIO.foreach_(rest)(send)
-      case msg @ Message.Broadcast(_)                    =>
+      case msg @ Message.Broadcast(_)                        =>
         broadcast.add(msg.asInstanceOf[Message.Broadcast[Chunk[Byte]]])
-      case Message.WithTimeout(message, action, timeout) =>
+      case Message.WithTimeout(message, action, timeout)     =>
         send(message) *> action.delay(timeout).flatMap(send).unit
     }
 
@@ -58,9 +64,9 @@ class MessageSink(
           log.error("error during processing messages.", cause)
         case Take(Exit.Success(msgs))  =>
           ZIO.foreach(msgs) {
-            case msg: Message.BestEffort[Chunk[Byte] @unchecked] =>
+            case msg: Message.BestEffortByName[Chunk[Byte] @unchecked] =>
               Take.fromEffect(protocol.onMessage(msg)).flatMap(processTake(_))
-            case _                                               =>
+            case _                                                     =>
               ZIO.dieMessage("Something went horribly wrong.")
           }
       }

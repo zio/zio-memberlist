@@ -1,18 +1,17 @@
-package zio.memberlist.example
+package zio.memberlist
 
 import upickle.default.macroRW
 import zio.clock.Clock
-import zio.config.getConfig
 import zio.console.Console
 import zio.duration._
 import zio.logging.{Logging, log}
-import zio.memberlist._
 import zio.memberlist.discovery.Discovery
 import zio.memberlist.encoding.ByteCodec
-import zio.nio.core.InetAddress
+import zio.memberlist.state.NodeName
+import zio.nio.core.{InetAddress, InetSocketAddress}
 import zio.{ExitCode, Has, URIO, ZEnv, ZIO, ZLayer}
 
-object TestNode extends zio.App {
+class LocalNode(port: Int) extends zio.App {
 
   sealed trait ChaosMonkey
 
@@ -30,22 +29,30 @@ object TestNode extends zio.App {
 
   import ChaosMonkey._
 
-  val discovery: ZLayer[Has[MemberlistConfig] with Logging, Nothing, Has[Discovery]] =
-    ZLayer.fromManaged(
-      for {
-        appConfig  <- getConfig[MemberlistConfig].toManaged_
-        serviceDns <- InetAddress
-                        .byName("zio.memberlist-node.zio.memberlist-experiment.svc.cluster.local")
-                        .orDie
-                        .toManaged_
-        discovery  <- Discovery.k8Dns(serviceDns, 10.seconds, appConfig.port).build.map(_.get)
-      } yield discovery
-    )
+  val discovery: ZLayer[Any, Nothing, Has[Discovery]] = for {
+    localAddress <- InetAddress.localHost.orDie.toLayer
+    first        <- InetSocketAddress.inetAddress(localAddress.get, 5557).toLayer
+    second       <- InetSocketAddress.inetAddress(localAddress.get, 5558).toLayer
+    discovery    <- Discovery.staticList(Set(first.get, second.get))
+  } yield discovery
 
   val dependencies: ZLayer[Console with Clock with zio.system.System, Error, Logging with Has[
     MemberlistConfig
   ] with Has[Discovery] with Clock with Has[Memberlist[ChaosMonkey]]] = {
-    val config  = MemberlistConfig.fromEnv.orDie
+    val config  = ZLayer.succeed(
+      MemberlistConfig(
+        name = NodeName("local_node_" + port),
+        port = port,
+        protocolInterval = 1.second,
+        protocolTimeout = 500.milliseconds,
+        messageSizeLimit = 64000,
+        broadcastResent = 10,
+        localHealthMaxMultiplier = 8,
+        suspicionAlpha = 9,
+        suspicionBeta = 9,
+        suspicionRequiredConfirmations = 3
+      )
+    )
     val logging = Logging.console()
     val seeds   = (logging ++ config) >+> discovery
     (seeds ++ Clock.live) >+> Memberlist.live[ChaosMonkey]
@@ -57,7 +64,7 @@ object TestNode extends zio.App {
         ZIO.whenCase(message) { case SimulateCpuSpike =>
           log.info("simulating cpu spike")
         }
-    }.exitCode
+    }.fork *> events[ChaosMonkey].foreach(event => log.info("cluster event: " + event)).exitCode
 
   def run(args: List[String]): URIO[ZEnv with zio.console.Console, ExitCode] =
     program
@@ -65,3 +72,6 @@ object TestNode extends zio.App {
       .exitCode
 
 }
+
+object Node1 extends LocalNode(5557)
+object Node2 extends LocalNode(5558)

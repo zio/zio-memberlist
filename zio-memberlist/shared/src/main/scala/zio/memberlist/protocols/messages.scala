@@ -5,6 +5,7 @@ import zio.Chunk
 import zio.memberlist.NodeAddress
 import zio.memberlist.encoding.ByteCodec
 import zio.memberlist.protocols.messages.FailureDetection.{Ack, Alive, Dead, Ping, PingReq, Suspect}
+import zio.memberlist.protocols.messages.Initial.{Accept, Join, Reject}
 import zio.memberlist.state.NodeName
 
 object messages {
@@ -14,6 +15,9 @@ object messages {
   object MemberlistMessage {
     implicit def codec[A: ByteCodec]: ByteCodec[MemberlistMessage] =
       ByteCodec.tagged[MemberlistMessage][
+        Join,
+        Accept,
+        Reject,
         Ping,
         PingReq,
         Ack,
@@ -71,17 +75,17 @@ object messages {
 
   object Initial {
 
-    final case class Join(nodeAddress: NodeAddress) extends Initial
+    final case class Join(nodeAddress: NodeAddress, nodeName: NodeName) extends Initial
 
-    case object Accept extends Initial
+    case class Accept(nodeAddress: NodeAddress) extends Initial
 
     final case class Reject(msg: String) extends Initial
 
     implicit val joinCodec: ByteCodec[Join] =
       ByteCodec.fromReadWriter(macroRW[Join])
 
-    implicit val acceptCodec: ByteCodec[Accept.type] =
-      ByteCodec.fromReadWriter(macroRW[Accept.type])
+    implicit val acceptCodec: ByteCodec[Accept] =
+      ByteCodec.fromReadWriter(macroRW[Accept])
 
     implicit val rejectCodec: ByteCodec[Reject] =
       ByteCodec.fromReadWriter(macroRW[Reject])

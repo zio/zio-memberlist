@@ -15,6 +15,8 @@ Name of the project come from name of Hashicorp project [memberlist](https://git
 `ZIO-memberlist` is available via maven repo so import in `build.sbt` is sufficient:
 
 ```scala
+resolvers += Resolver.sonatypeRepo("public")
+
 libraryDependencies += "dev.zio" %% "zio-memberlist" % "@VERSION@" 
 ```
 

@@ -5,7 +5,7 @@ Global / onChangedBuildSource := ReloadOnSourceChanges
 inThisBuild(
   List(
     organization := "dev.zio",
-    homepage := Some(url("https://zio.github.io/zio-memberlist/")),
+    homepage := Some(url("https://zio.dev/zio-memberlist/")),
     licenses := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
     developers := List(
       Developer("pshemass", "Przemyslaw Wierzbicki", "rzbikson@gmail.com", url("https://github.com/pshemass"))
@@ -45,8 +45,7 @@ lazy val root = project
     zioMemberlistJVM,
     zioMemberlistJS,
     zioMemberlistNative,
-    k8_experiment,
-    docs
+    k8_experiment
   )
 
 lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
@@ -110,12 +109,7 @@ lazy val docs = project
     publish / skip := true,
     moduleName := "zio-memberlist-docs",
     scalacOptions -= "-Yno-imports",
-    scalacOptions -= "-Xfatal-warnings",
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioMemberlistJVM),
-    ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
-    cleanFiles += (ScalaUnidoc / unidoc / target).value,
-    docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
-    docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value
+    scalacOptions -= "-Xfatal-warnings"
   )
   .dependsOn(zioMemberlistJVM)
-  .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
+  .enablePlugins(WebsitePlugin)

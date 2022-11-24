@@ -12,14 +12,14 @@ This library is inspired by Hashicorp research on improving [SWIM](https://ieeex
 Please find more details on our [website](https://zio.github.io/zio-memberlist/).
 
 # Documentation
-[ZIO Memberlist Microsite](https://zio.github.io/zio-memberlist/)
+[ZIO Memberlist Microsite](https://zio.dev/zio-memberlist/)
 
 # Contributing
-[Documentation for contributors](https://zio.github.io/zio-memberlist/docs/about/about_contributing)
+[Documentation for contributors](https://zio.dev/about/contributing)
 
 ## Code of Conduct
 
-See the [Code of Conduct](https://zio.github.io/zio-memberlist/docs/about/about_coc)
+See the [Code of Conduct](https://zio.dev/about/code-of-conduct)
 
 ## Support
 

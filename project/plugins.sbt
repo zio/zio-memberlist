@@ -16,5 +16,8 @@ addSbtPlugin("org.scalameta"                     % "sbt-scalafmt"               
 addSbtPlugin("pl.project13.scala"                % "sbt-jcstress"                  % "0.2.0")
 addSbtPlugin("pl.project13.scala"                % "sbt-jmh"                       % "0.4.3")
 addSbtPlugin("com.github.sbt"                    % "sbt-native-packager"           % "1.9.6")
+addSbtPlugin("dev.zio"                           % "zio-sbt-website"               % "0.0.0+84-6fd7d64e-SNAPSHOT")
 
 libraryDependencies += "org.snakeyaml" % "snakeyaml-engine" % "2.3"
+
+resolvers += Resolver.sonatypeRepo("public")

@@ -1,6 +1,7 @@
 ---
-id: overview_index
-title: "Getting Started"
+id: index
+title: "Introduction to ZIO Memberlist"
+sidebar_label: "ZIO Memberlist"
 ---
 
 ZIO-memberlist let you form cluster of multiply machines and by using gossip protocol which sends periodically messages between nodes maintain cluster and detects failining nodes. 
@@ -14,7 +15,9 @@ Name of the project come from name of Hashicorp project [memberlist](https://git
 `ZIO-memberlist` is available via maven repo so import in `build.sbt` is sufficient:
 
 ```scala
-libraryDependencies += "dev.zio" %% "zio-memberlist" % version
+resolvers += Resolver.sonatypeRepo("public")
+
+libraryDependencies += "dev.zio" %% "zio-memberlist" % "@VERSION@" 
 ```
 
 ## First Cluster

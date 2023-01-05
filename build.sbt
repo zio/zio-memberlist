@@ -109,7 +109,15 @@ lazy val docs = project
     publish / skip := true,
     moduleName := "zio-memberlist-docs",
     scalacOptions -= "-Yno-imports",
-    scalacOptions -= "-Xfatal-warnings"
+    scalacOptions -= "-Xfatal-warnings",
+    projectName := "ZIO Memberlist",
+    badgeInfo := Some(
+      BadgeInfo(
+        artifact = "zio-memberlist_2.12",
+        projectStage = ProjectStage.Experimental
+      )
+    ),
+    docsPublishBranch := "master"
   )
   .dependsOn(zioMemberlistJVM)
   .enablePlugins(WebsitePlugin)

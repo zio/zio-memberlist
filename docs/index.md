@@ -6,6 +6,10 @@ sidebar_label: "ZIO Memberlist"
 
 ZIO-memberlist let you form cluster of multiply machines and by using gossip protocol which sends periodically messages between nodes maintain cluster and detects failining nodes. 
 
+@PROJECT_BADGES@
+
+## Introduction
+
 Target for this library are users that builds distributed systems from the groud up. It could potentially be used to build next generation analytics platform, distributed caching solution or monitoring solutions to name a few. 
 
 Name of the project come from name of Hashicorp project [memberlist](https://github.com/hashicorp/memberlist). 

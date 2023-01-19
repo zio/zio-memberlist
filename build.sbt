@@ -45,7 +45,8 @@ lazy val root = project
     zioMemberlistJVM,
     zioMemberlistJS,
     zioMemberlistNative,
-    k8_experiment
+    k8_experiment,
+    docs
   )
 
 lazy val zioMemberlist = crossProject(JSPlatform, JVMPlatform, NativePlatform)
@@ -106,17 +107,13 @@ lazy val docs = project
   .in(file("zio-memberlist-docs"))
   .settings(stdSettings("zio-memberlist"))
   .settings(
-    publish / skip := true,
     moduleName := "zio-memberlist-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
     projectName := "ZIO Memberlist",
-    badgeInfo := Some(
-      BadgeInfo(
-        artifact = "zio-memberlist_2.12",
-        projectStage = ProjectStage.Experimental
-      )
-    ),
+    mainModuleName := (zioMemberlistJVM / moduleName).value,
+    projectStage := ProjectStage.Experimental,
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioMemberlistJVM),
     docsPublishBranch := "master"
   )
   .dependsOn(zioMemberlistJVM)

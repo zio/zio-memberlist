@@ -105,11 +105,11 @@ lazy val k8_experiment = project
 
 lazy val docs = project
   .in(file("zio-memberlist-docs"))
-  .settings(stdSettings("zio-memberlist"))
   .settings(
     moduleName := "zio-memberlist-docs",
     scalacOptions -= "-Yno-imports",
     scalacOptions -= "-Xfatal-warnings",
+    crossScalaVersions := Seq(Scala212, Scala213, ScalaDotty),
     projectName := "ZIO Memberlist",
     mainModuleName := (zioMemberlistJVM / moduleName).value,
     projectStage := ProjectStage.Experimental,
